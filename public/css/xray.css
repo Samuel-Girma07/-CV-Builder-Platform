@@ -1,0 +1,192 @@
+/* ATS X-Ray Feature CSS */
+.xray-container {
+  display: flex;
+  gap: 20px;
+  height: 70vh;
+  margin-top: 20px;
+}
+
+.xray-pane {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.xray-pane h3 {
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.xray-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  border-radius: var(--r-control);
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+}
+
+.pdf-canvas-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 16px;
+}
+
+.pdf-canvas-container canvas {
+  max-width: 100%;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* Native PDF preview fills the whole pane. */
+.pdf-canvas-container {
+  padding: 0;
+}
+
+.xray-pdf-embed {
+  width: 100%;
+  height: 100%;
+  min-height: 60vh;
+  border: 0;
+  display: block;
+}
+
+.xray-text-stream {
+  padding: 16px;
+  font-family: monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  color: var(--text);
+}
+
+.xray-flagged-line {
+  background-color: var(--danger-soft);
+  color: var(--danger);
+  padding: 2px 4px;
+  border-radius: 4px;
+  display: block;
+  margin-bottom: 4px;
+  border-left: 3px solid var(--danger);
+}
+
+.xray-clean-line {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--faint);
+}
+
+/* ---- Verdict card (clean parse / risks to review) ---- */
+.xray-verdict {
+  margin-top: 20px;
+  padding: 22px 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: var(--r-card);
+}
+
+.xray-verdict--pass {
+  border-left-color: var(--accent);
+}
+
+.xray-verdict--warn {
+  border-left-color: var(--warn);
+}
+
+.xray-verdict-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.xray-verdict-mark {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.xray-verdict-mark svg {
+  width: 30px;
+  height: 30px;
+}
+
+.xray-verdict--pass .xray-verdict-mark {
+  color: var(--accent);
+}
+
+.xray-verdict--warn .xray-verdict-mark {
+  color: var(--warn);
+}
+
+.xray-verdict-eyebrow {
+  margin: 0 0 3px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.xray-verdict-title {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.xray-verdict-sub {
+  margin: 14px 0 0;
+  max-width: 64ch;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.xray-checks {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 24px;
+}
+
+.xray-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.xray-check svg {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+}
+
+.xray-check--pass svg {
+  color: var(--accent);
+}
+
+.xray-check--fail {
+  color: var(--muted);
+}
+
+.xray-check--fail svg {
+  color: var(--danger);
+}
+
+@media (max-width: 620px) {
+  .xray-checks {
+    grid-template-columns: 1fr;
+  }
+}

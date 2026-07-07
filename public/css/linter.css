@@ -1,0 +1,38 @@
+/* Feature 6 CV Linter CSS */
+.lint-wrapper {
+  position: relative;
+  width: 100%;
+}
+.lint-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  padding: 11px 13px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: transparent;
+  pointer-events: none;
+  overflow: hidden;
+  box-sizing: border-box;
+  z-index: 1;
+}
+.lint-wrapper textarea {
+  position: relative;
+  z-index: 2;
+  background: transparent; /* allow overlay behind it */
+  color: var(--text);
+  caret-color: var(--text);
+}
+.lint-error {
+  text-decoration: underline wavy var(--danger);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  pointer-events: auto;
+  cursor: help;
+}

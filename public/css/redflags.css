@@ -1,0 +1,13 @@
+/* Feature 5 Red Flags CSS */
+.flag-high { color: var(--danger); }
+.flag-mid { color: var(--accent); }
+.flag-low { color: var(--success); }
+.red-flag-score {
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.05);
+}
+.red-flag-score.flag-high { background: rgba(239, 68, 68, 0.1); }
+.red-flag-score.flag-mid { background: rgba(245, 158, 11, 0.1); }
+.red-flag-score.flag-low { background: rgba(16, 185, 129, 0.1); }
