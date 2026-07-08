@@ -52,6 +52,10 @@ const api = {
     // Abort genuinely hung requests. 60s sits well above normal AI latency
     // (a few seconds) so it only trips on a stuck connection.
     const controller = new AbortController();
+    if (options.signal?.aborted) controller.abort();
+    else if (options.signal) {
+      options.signal.addEventListener('abort', () => controller.abort());
+    }
     const timeoutId = setTimeout(() => controller.abort(), options.timeout || 60000);
 
     let response;
@@ -59,6 +63,9 @@ const api = {
       response = await fetch(path, { ...options, headers, signal: controller.signal });
     } catch (err) {
       if (err.name === 'AbortError') {
+        if (options.signal?.aborted) {
+          throw new Error('Request cancelled by user.');
+        }
         throw new Error('The request timed out. Please check your connection and try again.');
       }
       throw new Error('Network error. Please check your connection and try again.');
@@ -86,23 +93,23 @@ const api = {
     }
     return response.blob();
   },
-  get(path) {
-    return this.request(path);
+  get(path, options = {}) {
+    return this.request(path, options);
   },
-  post(path, body) {
-    return this.request(path, { method: 'POST', body: JSON.stringify(body) });
+  post(path, body, options = {}) {
+    return this.request(path, { method: 'POST', body: JSON.stringify(body), ...options });
   },
-  put(path, body) {
-    return this.request(path, { method: 'PUT', body: JSON.stringify(body) });
+  put(path, body, options = {}) {
+    return this.request(path, { method: 'PUT', body: JSON.stringify(body), ...options });
   },
-  patch(path, body) {
-    return this.request(path, { method: 'PATCH', body: JSON.stringify(body) });
+  patch(path, body, options = {}) {
+    return this.request(path, { method: 'PATCH', body: JSON.stringify(body), ...options });
   },
-  delete(path) {
-    return this.request(path, { method: 'DELETE' });
+  delete(path, options = {}) {
+    return this.request(path, { method: 'DELETE', ...options });
   },
-  upload(path, formData) {
-    return this.request(path, { method: 'POST', body: formData });
+  upload(path, formData, options = {}) {
+    return this.request(path, { method: 'POST', body: formData, ...options });
   },
 };
 
@@ -187,7 +194,7 @@ function setBtnLoading(button, label) {
 
 /* Full-screen contextual loader for slow AI calls: rotating status,
    step dots, and an elapsed-seconds counter so long waits feel alive. */
-function aiLoader(title, steps) {
+function aiLoader(title, steps, onCancel) {
   const overlay = document.createElement('div');
   overlay.className = 'overlay';
   overlay.innerHTML = `
@@ -197,6 +204,7 @@ function aiLoader(title, steps) {
       <div class="l-status"></div>
       <div class="loader-steps" aria-hidden="true">${steps.map(() => '<span></span>').join('')}</div>
       <div class="l-timer">0s elapsed</div>
+      <button class="btn ghost btn-cancel-loader" style="margin-top: 20px; width: 100%;">Cancel</button>
     </div>`;
   document.body.appendChild(overlay);
 
@@ -223,6 +231,12 @@ function aiLoader(title, steps) {
     timerEl.textContent = `${Math.round((Date.now() - startedAt) / 1000)}s elapsed`;
   }, 1000);
 
+  if (onCancel) {
+    overlay.querySelector('.btn-cancel-loader').addEventListener('click', onCancel);
+  } else {
+    overlay.querySelector('.btn-cancel-loader').remove();
+  }
+
   return {
     stop() {
       window.clearInterval(stepTimer);
@@ -233,9 +247,12 @@ function aiLoader(title, steps) {
 }
 
 async function runWithLoader(title, steps, fn) {
-  const loader = aiLoader(title, steps);
+  const controller = new AbortController();
+  const loader = aiLoader(title, steps, () => {
+    controller.abort();
+  });
   try {
-    return await fn();
+    return await fn(controller.signal);
   } finally {
     loader.stop();
   }
@@ -854,7 +871,7 @@ function wireQuickPanel() {
           'Comparing against your CV…',
           'Scoring the match…',
           'Listing missing skills…',
-        ], () => api.post('/api/applications', body));
+        ], (signal) => api.post('/api/applications', body, { signal }));
         
         if (data.application.ats_match_score < 30) {
           showModal({
@@ -889,7 +906,7 @@ function wireQuickPanel() {
           'Extracting experience…',
           'Structuring skills…',
           'Finalizing profile…',
-        ], () => api.upload('/api/profile/upload', formData));
+        ], (signal) => api.request('/api/profile/upload', { method: 'POST', body: formData, timeout: 120000, signal }));
         showToast('CV parsed and saved.');
         await dashboardView();
       } catch (err) {
@@ -1022,7 +1039,7 @@ async function profileView() {
       const data = await api.put('/api/profile', readProfileForm(event.currentTarget));
       state.profile = data.profile;
       showToast('Profile saved.');
-      await profileView();
+      navigate('dashboard');
     } catch (err) {
       showToast(err.message, 'error');
       restore();
@@ -1037,12 +1054,16 @@ async function profileView() {
         'Reviewing your profile…',
         'Drafting a summary…',
         'Polishing the wording…',
-      ], () => api.post('/api/profile/summary', {}));
+      ], (signal) => api.post('/api/profile/summary', {}, { signal }));
       state.profile = data.profile;
       showToast('Summary generated.');
       await profileView();
     } catch (err) {
-      showToast(err.message, 'error');
+      if (err.message === 'Request cancelled by user.') {
+        showToast('Cancelled.', 'info');
+      } else {
+        showToast(err.message, 'error');
+      }
     }
   });
 
@@ -1055,12 +1076,16 @@ async function profileView() {
         'Extracting experience…',
         'Structuring skills…',
         'Finalizing profile…',
-      ], () => api.upload('/api/profile/upload', formData));
+      ], (signal) => api.request('/api/profile/upload', { method: 'POST', body: formData, timeout: 120000, signal }));
       state.profile = data.profile;
       showToast('CV parsed and saved.');
       await profileView();
     } catch (err) {
-      showToast(err.message, 'error');
+      if (err.message === 'Request cancelled by user.') {
+        showToast('Cancelled.', 'info');
+      } else {
+        showToast(err.message, 'error');
+      }
     }
   });
 
@@ -1180,7 +1205,11 @@ async function cvView() {
       state.profile = data.profile;
       showToast('Skill levels saved.');
     } catch (err) {
-      showToast(err.message, 'error');
+      if (err.message === 'Request cancelled by user.') {
+        showToast('Cancelled.', 'info');
+      } else {
+        showToast(err.message, 'error');
+      }
     } finally {
       restore();
     }
@@ -1248,7 +1277,7 @@ async function newApplicationView() {
         'Comparing against your CV…',
         'Scoring the match…',
         'Listing missing skills…',
-      ], () => api.post('/api/applications', body));
+      ], (signal) => api.post('/api/applications', body, { signal }));
 
       if (data.application.ats_match_score < 30) {
         showModal({
@@ -1486,11 +1515,15 @@ async function applicationDetailView(id) {
         'Matching your experience…',
         'Writing the letter…',
         'Refining the tone…',
-      ], () => api.post(`/api/applications/${id}/cover-letter`, body));
+      ], (signal) => api.post(`/api/applications/${id}/cover-letter`, body, { signal }));
       showToast('Cover letter generated.');
       await applicationDetailView(id);
     } catch (err) {
-      showToast(err.message, 'error');
+      if (err.message === 'Request cancelled by user.') {
+        showToast('Cancelled.', 'info');
+      } else {
+        showToast(err.message, 'error');
+      }
     }
   });
 
@@ -1534,7 +1567,7 @@ async function applicationDetailView(id) {
           'Cross-referencing your experience…',
           'Rewriting bullet points for impact…',
           'Finalizing ATS compliance…',
-        ], () => api.post(`/api/applications/${id}/tailor-cv`));
+        ], (signal) => api.post(`/api/applications/${id}/tailor-cv`, {}, { signal }));
         showToast('CV optimized for this job.');
         await applicationDetailView(id);
       } catch (err) {
@@ -1557,7 +1590,7 @@ async function applicationDetailView(id) {
           'Predicting likely questions…',
           'Finding examples from your past…',
           'Formulating STAR method answers…',
-        ], () => api.post(`/api/applications/${id}/interview-prep`));
+        ], (signal) => api.post(`/api/applications/${id}/interview-prep`, {}, { signal }));
         showToast('Interview flashcards generated.');
         await applicationDetailView(id);
       } catch (err) {
@@ -1765,10 +1798,10 @@ async function settingsView() {
         </form>
       </section>
 
-      <section class="panel" style="border-color: var(--error);">
-        <div class="panel-head"><h2 style="color: var(--error);">Danger Zone</h2></div>
+      <section class="panel" style="border-color: var(--danger);">
+        <div class="panel-head"><h2 style="color: var(--danger);">Danger Zone</h2></div>
         <div style="margin-bottom: 12px; color: var(--muted);">Permanently delete your account and all associated data. This action cannot be undone.</div>
-        <button class="btn" id="deleteAccountBtn" style="background: var(--error); color: #fff; border: none;">Delete Account</button>
+        <button class="btn danger" id="deleteAccountBtn">Delete Account</button>
       </section>
     </div>`);
 
@@ -1783,7 +1816,11 @@ async function settingsView() {
       showToast('Details updated successfully.');
       await settingsView();
     } catch (err) {
-      showToast(err.message, 'error');
+      if (err.message === 'Request cancelled by user.') {
+        showToast('Cancelled.', 'info');
+      } else {
+        showToast(err.message, 'error');
+      }
     } finally {
       restore();
     }
@@ -1797,7 +1834,11 @@ async function settingsView() {
       showToast('Password changed successfully.');
       e.currentTarget.reset();
     } catch (err) {
-      showToast(err.message, 'error');
+      if (err.message === 'Request cancelled by user.') {
+        showToast('Cancelled.', 'info');
+      } else {
+        showToast(err.message, 'error');
+      }
     } finally {
       restore();
     }
@@ -1814,7 +1855,11 @@ async function settingsView() {
       state.profile = data.profile;
       showToast('Preferences saved.');
     } catch (err) {
-      showToast(err.message, 'error');
+      if (err.message === 'Request cancelled by user.') {
+        showToast('Cancelled.', 'info');
+      } else {
+        showToast(err.message, 'error');
+      }
     } finally {
       restore();
     }
@@ -1826,9 +1871,9 @@ async function settingsView() {
       const overlay = document.createElement('div');
       overlay.className = 'modal-overlay';
       overlay.innerHTML = `
-        <div class="modal-dialog" role="dialog" aria-modal="true" style="border-top: 4px solid var(--error);">
+        <div class="modal-dialog" role="dialog" aria-modal="true" style="border-top: 4px solid var(--danger);">
           <div class="modal-head">
-            <h2 style="color: var(--error); display: flex; align-items: center; gap: 8px;">
+            <h2 style="color: var(--danger); display: flex; align-items: center; gap: 8px;">
               ${icons.alert} Delete Account
             </h2>
           </div>
@@ -1838,7 +1883,7 @@ async function settingsView() {
           </div>
           <div class="modal-actions" style="margin-top: 24px;">
             <button class="btn ghost" id="cancelDeleteBtn">Cancel</button>
-            <button class="btn" id="confirmDeleteBtn" style="background: var(--error); color: #fff; border: none;">Yes, Delete Everything</button>
+            <button class="btn danger" id="confirmDeleteBtn">Yes, Delete Everything</button>
           </div>
         </div>
       `;
@@ -1871,7 +1916,8 @@ async function settingsView() {
           
           setTimeout(() => {
             close();
-            logout();
+            clearAuth();
+            authView();
           }, 1500);
           
         } catch (err) {
@@ -2018,7 +2064,7 @@ async function xrayView() {
         'Analyzing layout...',
         'Extracting text stream...',
         'Flagging risks...'
-      ], () => api.upload('/api/xray/upload', formData));
+      ], (signal) => api.upload('/api/xray/upload', formData, { signal }));
       
       showToast('X-Ray scan complete');
       await renderReport(data.id, data.report);
@@ -2031,7 +2077,11 @@ async function xrayView() {
         dropdown.innerHTML = `<option value="">-- Select a past scan --</option>` + newRes.versions.map(v => `<option value="${v.id}">${escapeHtml(v.file_name)} (${new Date(v.uploaded_at).toLocaleDateString()})</option>`).join('');
       }
     } catch (err) {
-      showToast(err.message, 'error');
+      if (err.message === 'Request cancelled by user.') {
+        showToast('Cancelled.', 'info');
+      } else {
+        showToast(err.message, 'error');
+      }
     }
   });
 

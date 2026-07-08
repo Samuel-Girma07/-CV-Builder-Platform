@@ -16,7 +16,6 @@ const DEFAULT_COLS = [
   { id: 'status', label: 'Status' },
   { id: 'ats_match_score', label: 'ATS Score', readOnly: true },
   { id: 'days_since', label: 'Days Since Applied', readOnly: true },
-  { id: '_actions', label: '', width: '60px', readOnly: true },
 ];
 
 function getGridColumns() {
@@ -84,7 +83,7 @@ function drawGrid() {
     const sortClass = isSortable ? 'sortable ' + (gridState.sortCol === c.id ? 'sorted' : '') : '';
     const indicator = gridState.sortCol === c.id ? (gridState.sortDir === 'asc' ? '▲' : '▼') : (isSortable ? '↕' : '');
     return `<th data-col="${c.id}" class="${sortClass}">${escapeHtml(c.label)} <span class="sort-indicator">${indicator}</span></th>`;
-  }).join('');
+  }).join('') + `<th class="col-actions-head"></th>`;
 
   const filters = cols.map(c => {
     if (c.id === '_select' || c.readOnly || c.isCustom) return `<th></th>`;
@@ -101,10 +100,10 @@ function drawGrid() {
       </th>`;
     }
     return `<th><input type="text" data-filter="${c.id}" value="${escapeHtml(val)}" placeholder="Filter..."></th>`;
-  }).join('');
+  }).join('') + `<th class="col-actions-head"></th>`;
 
   const rowsHtml = gridState.data.length === 0 
-    ? `<tr><td colspan="${cols.length}" style="text-align:center;padding:40px;">No applications found.</td></tr>`
+    ? `<tr><td colspan="${cols.length + 1}" style="text-align:center;padding:40px;">No applications found.</td></tr>`
     : gridState.data.map(row => {
       const selected = gridState.selectedIds.has(row.id);
       const stRow = String(row.status || '').toLowerCase();
@@ -112,9 +111,6 @@ function drawGrid() {
       const tds = cols.map(c => {
         if (c.id === '_select') {
           return `<td><input type="checkbox" class="row-select" data-id="${row.id}" ${selected ? 'checked' : ''}></td>`;
-        }
-        if (c.id === '_actions') {
-          return `<td><button class="btn ghost open-app-btn" data-id="${row.id}" style="padding: 4px 8px; font-size: 12px; margin: 0;">Open</button></td>`;
         }
         
         const val = getCellValue(row, c.id);
@@ -149,7 +145,9 @@ function drawGrid() {
         }
         return `<td class="${c.readOnly ? '' : 'editable'}" tabindex="0" data-id="${row.id}" data-col="${c.id}">${displayHtml}</td>`;
       }).join('');
-      return `<tr class="${selected ? 'selected' : ''}" style="${rowStyle}">${tds}</tr>`;
+      // Open button always appended as last sticky td
+      const actionTd = `<td class="col-actions-cell"><button class="btn ghost open-app-btn" data-id="${row.id}">Open</button></td>`;
+      return `<tr class="${selected ? 'selected' : ''}" style="${rowStyle}">${tds}${actionTd}</tr>`;
     }).join('');
 
   const toolbarHtml = `

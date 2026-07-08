@@ -1214,6 +1214,25 @@ button.row:hover {
   background: var(--accent);
 }
 
+.btn-cancel-loader {
+  margin-top: 20px;
+  width: 100%;
+  padding: 9px 18px;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-field);
+  color: var(--muted);
+  font-size: 13px;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.btn-cancel-loader:hover {
+  background: var(--surface-2);
+  border-color: var(--danger, #e54d4d);
+  color: var(--danger, #e54d4d);
+}
+
 /* ----------------------------------------------------------------
    Modal / Popup
    ---------------------------------------------------------------- */
@@ -1750,9 +1769,11 @@ input[type="checkbox"] {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
   white-space: nowrap;
   user-select: none;
 }
+.data-grid th:last-child { border-right: none; }
 .data-grid th.sortable { cursor: pointer; }
 .data-grid th.sortable:hover { color: var(--text); }
 .data-grid th .sort-indicator { font-size: 10px; margin-left: 4px; opacity: 0.5; }
@@ -1761,9 +1782,11 @@ input[type="checkbox"] {
 .data-grid td {
   padding: 10px 12px;
   border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
   color: var(--text);
   vertical-align: middle;
 }
+.data-grid td:last-child { border-right: none; }
 .data-grid td.editable { cursor: pointer; }
 .data-grid td.editable:hover { background: rgba(255,255,255,0.03); }
 .data-grid td.editing { padding: 4px 6px; }
@@ -1818,6 +1841,34 @@ input[type="checkbox"] {
   border: 1px solid var(--line);
   border-radius: 4px;
   font-size: 13px;
+}
+
+/* Sticky Open column — always anchored to the right edge */
+.col-actions-head,
+.col-actions-cell {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  width: 80px;
+  min-width: 80px;
+  text-align: center;
+  background: var(--surface-2);
+  border-left: 1px solid var(--line-strong) !important;
+  border-right: none !important;
+}
+.col-actions-cell {
+  background: var(--surface);
+}
+.data-grid tr:hover .col-actions-cell {
+  background: rgba(255,255,255,0.02);
+}
+.data-grid tr.selected .col-actions-cell {
+  background: rgba(52, 210, 123, 0.06);
+}
+.open-app-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 /* ============================================================

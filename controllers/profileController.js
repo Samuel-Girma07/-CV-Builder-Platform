@@ -5,11 +5,79 @@ const profileQuery = require('../models/profileQuery');
 const { streamCvPdf, TEMPLATES } = require('../services/cvPdf');
 
 const SKILL_LEVELS = ['Familiar', 'Proficient', 'Advanced'];
-const NVIDIA_MODEL = process.env.NVIDIA_MODEL || 'qwen/qwen3-next-80b-a3b-instruct';
+
+// Primary: llama-3.3-70b — best-in-class JSON reliability on NVIDIA NIM.
+// Fallback: mistral-nemo — 12B, ultra-fast, near-zero cold-start.
+const PRIMARY_MODEL = process.env.NVIDIA_MODEL || 'meta/llama-3.1-70b-instruct';
+const FALLBACK_MODEL = 'meta/llama-3.1-8b-instruct';
+const PRIMARY_TIMEOUT_MS = 15000; // 15s — enough for a warm primary model
+const SERVER_ABORT_MS = 90000;    // 90s — hard ceiling for any single AI call
+
 const nvidiaClient = new OpenAI({
   apiKey: process.env.NVIDIA_API_KEY,
   baseURL: process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',
 });
+
+/**
+ * Attempt the AI call with the primary model first.
+ * If it does not respond within PRIMARY_TIMEOUT_MS, transparently retry
+ * using the faster fallback model.
+ * A hard server-side AbortController ensures neither call can run forever.
+ *
+ * @param {object} params  - openai.chat.completions.create() params (without `model`)
+ * @returns {Promise}      - Resolves with the completion response
+ */
+async function callAiWithFallback(params) {
+  const { logger } = require('../middlewares/logger');
+
+  // ── Primary attempt ────────────────────────────────────────────
+  const primaryController = new AbortController();
+  const primaryHardStop = setTimeout(() => primaryController.abort(), SERVER_ABORT_MS);
+
+  try {
+    logger.info(`AI call: primary model ${PRIMARY_MODEL}`);
+    const result = await Promise.race([
+      nvidiaClient.chat.completions.create(
+        { ...params, model: PRIMARY_MODEL },
+        { signal: primaryController.signal }
+      ),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('primary_timeout')), PRIMARY_TIMEOUT_MS)
+      ),
+    ]);
+    clearTimeout(primaryHardStop);
+    logger.info(`AI call: primary model succeeded`);
+    return result;
+  } catch (err) {
+    clearTimeout(primaryHardStop);
+    primaryController.abort(); // cancel any in-flight request
+    if (err.message !== 'primary_timeout') {
+      logger.warn(`AI call: primary model error (${err.message}). Trying fallback.`);
+    } else {
+      logger.warn(`AI call: primary model timed out after ${PRIMARY_TIMEOUT_MS}ms. Trying fallback.`);
+    }
+  }
+
+  // ── Fallback attempt ───────────────────────────────────────────
+  const fallbackController = new AbortController();
+  const fallbackHardStop = setTimeout(() => fallbackController.abort(), SERVER_ABORT_MS);
+
+  try {
+    logger.info(`AI call: fallback model ${FALLBACK_MODEL}`);
+    const result = await nvidiaClient.chat.completions.create(
+      { ...params, model: FALLBACK_MODEL },
+      { signal: fallbackController.signal }
+    );
+    clearTimeout(fallbackHardStop);
+    logger.info(`AI call: fallback model succeeded`);
+    return result;
+  } catch (err) {
+    clearTimeout(fallbackHardStop);
+    fallbackController.abort();
+    logger.error(`AI call: fallback model also failed (${err.message})`);
+    throw new Error('The AI service is currently unavailable. Please try again in a moment.');
+  }
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -127,8 +195,7 @@ const profileController = {
         return res.status(422).json({ error: 'Could not extract meaningful text from the PDF.' });
       }
 
-      const response = await nvidiaClient.chat.completions.create({
-        model: NVIDIA_MODEL,
+      const response = await callAiWithFallback({
         messages: [
           {
             role: 'system',
@@ -161,8 +228,7 @@ const profileController = {
       const profile = await profileQuery.findByUserId(req.user.id);
       const profileData = normalizeProfile((profile && profile.parsed_json_data) || req.body);
 
-      const response = await nvidiaClient.chat.completions.create({
-        model: NVIDIA_MODEL,
+      const response = await callAiWithFallback({
         messages: [
           {
             role: 'system',
