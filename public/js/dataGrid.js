@@ -77,7 +77,13 @@ function drawGrid() {
   
   const ths = cols.map(c => {
     if (c.id === '_select') {
-      return `<th style="width:40px"><input type="checkbox" id="selectAll"></th>`;
+      const allSelected = gridState.data.length > 0 && gridState.selectedIds.size === gridState.data.length;
+      return `<th style="width:40px">
+                <div class="custom-checkbox-wrap" style="margin: 0 auto;">
+                  <input type="checkbox" id="selectAll" ${allSelected ? 'checked' : ''} style="display: none;">
+                  <label for="selectAll" class="custom-checkbox-box"></label>
+                </div>
+              </th>`;
     }
     const isSortable = ['job_title', 'company', 'ats_match_score', 'created_at', 'status'].includes(c.id);
     const sortClass = isSortable ? 'sortable ' + (gridState.sortCol === c.id ? 'sorted' : '') : '';
@@ -110,7 +116,12 @@ function drawGrid() {
       const rowStyle = stRow === 'rejected' ? 'opacity: 0.6;' : (stRow.includes('offer') ? 'color: var(--c-primary); font-weight: 500;' : '');
       const tds = cols.map(c => {
         if (c.id === '_select') {
-          return `<td><input type="checkbox" class="row-select" data-id="${row.id}" ${selected ? 'checked' : ''}></td>`;
+          return `<td>
+                    <div class="custom-checkbox-wrap" style="margin: 0 auto;">
+                      <input type="checkbox" id="row-sel-${row.id}" class="row-select" data-id="${row.id}" ${selected ? 'checked' : ''} style="display: none;">
+                      <label for="row-sel-${row.id}" class="custom-checkbox-box"></label>
+                    </div>
+                  </td>`;
         }
         
         const val = getCellValue(row, c.id);

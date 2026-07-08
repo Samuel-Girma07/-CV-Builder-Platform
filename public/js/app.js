@@ -374,50 +374,113 @@ function authView(mode = 'login') {
   app.innerHTML = `
     <main class="auth-shell">
       <aside class="auth-aside">
-        <div class="brand-row">
+        <div class="brand-row" style="position: relative; z-index: 2;">
           <span class="logo">${icons.logo}</span>
           <span class="brand-name">CV Builder</span>
         </div>
-        <div class="auth-hero">
-          <h1>Career documents, scored and ready.</h1>
-          <p>Build a structured CV profile, measure it against any job description with an ATS score, and generate focused cover letters — all through a secure Express API.</p>
+        
+        <div class="cv-mock-visual">
+          <div class="cv-mock-doc">
+            <div class="cv-md-header">
+              <div class="cv-md-avatar"></div>
+              <div class="cv-md-h-lines">
+                <div class="cv-md-line h1"></div>
+                <div class="cv-md-line sub"></div>
+              </div>
+            </div>
+            <div class="cv-md-body">
+              <div class="cv-md-section">
+                <div class="cv-md-sec-title"></div>
+                <div class="cv-md-line block"></div>
+                <div class="cv-md-line block"></div>
+                <div class="cv-md-line block short"></div>
+              </div>
+              <div class="cv-md-section">
+                <div class="cv-md-sec-title"></div>
+                <div class="cv-md-item">
+                  <div class="cv-md-dot"></div>
+                  <div class="cv-md-line thin"></div>
+                </div>
+                <div class="cv-md-item">
+                  <div class="cv-md-dot"></div>
+                  <div class="cv-md-line thin"></div>
+                </div>
+                <div class="cv-md-item">
+                  <div class="cv-md-dot"></div>
+                  <div class="cv-md-line thin shorter"></div>
+                </div>
+              </div>
+            </div>
+            <div class="cv-md-stamp">ATS Optimized</div>
+          </div>
         </div>
-        <div class="auth-stats">
-          <div class="as"><b>ATS</b><span>Match scoring</span></div>
-          <div class="as"><b>PDF</b><span>Export ready</span></div>
-          <div class="as"><b>JWT</b><span>Secure sessions</span></div>
+
+        <div class="auth-hero" style="position: relative; z-index: 2;">
+          <h1>Precision tools for<br>modern careers.</h1>
+          <p>Build a structured CV profile, measure it against any job description with an ATS score, and generate focused cover letters all through a secure Express API.</p>
         </div>
       </aside>
       <section class="auth-main">
         <div class="auth-card">
-          <h2>${isRegister ? 'Create your account' : 'Welcome back'}</h2>
-          <p>${isRegister ? 'Set up an account, then build your CV profile.' : 'Sign in to continue your applications.'}</p>
-          <form class="form" id="authForm" novalidate>
-            ${isRegister ? `
-              <div class="field">
+          <div class="auth-card-top-bar"></div>
+          <div class="auth-card-inner">
+            <div class="auth-card-icon">
+              ${isRegister
+                ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></svg>`
+                : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>`
+              }
+            </div>
+            <h2>${isRegister ? 'Create your account' : 'Welcome back'}</h2>
+            <p>${isRegister ? 'Start building your career toolkit today.' : 'Sign in to continue your journey.'}</p>
+            <form class="form" id="authForm" novalidate>
+              ${isRegister ? `
+              <div class="field auth-field">
                 <label for="fullName">Full name</label>
-                <input id="fullName" name="fullName" autocomplete="name" placeholder="Jane Carter" required>
+                <div class="auth-input-wrap">
+                  <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+                  <input id="fullName" name="fullName" autocomplete="name" placeholder="Jane Carter" required>
+                </div>
               </div>` : ''}
-            <div class="field">
-              <label for="email">Email</label>
-              <input id="email" name="email" type="email" autocomplete="email" placeholder="you@email.com" required>
-            </div>
-            <div class="field">
-              <label for="password">Password</label>
-              <input id="password" name="password" type="password" autocomplete="${isRegister ? 'new-password' : 'current-password'}" placeholder="At least 8 characters" minlength="8" required>
-              ${isRegister ? '<span class="hint">Stored only as a bcrypt hash — never in plain text.</span>' : ''}
-            </div>
-            <button class="btn primary block lg" type="submit">${isRegister ? 'Create account' : 'Sign in'}</button>
-          </form>
-          <p class="auth-switch">
-            ${isRegister ? 'Already registered?' : 'Need an account?'}
-            <button class="link-button" id="switchAuth" type="button">${isRegister ? 'Sign in' : 'Create one'}</button>
-          </p>
+              <div class="field auth-field">
+                <label for="email">Email</label>
+                <div class="auth-input-wrap">
+                  <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                  <input id="email" name="email" type="email" autocomplete="email" placeholder="you@email.com" required>
+                </div>
+              </div>
+              <div class="field auth-field">
+                <label for="password">Password</label>
+                <div class="auth-input-wrap">
+                  <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  <input id="password" name="password" type="password" autocomplete="${isRegister ? 'new-password' : 'current-password'}" placeholder="At least 8 characters" minlength="8" required>
+                </div>
+              </div>
+              ${isRegister ? `
+              <div style="display: flex; align-items: center; gap: 10px; margin: 4px 0 20px 0; user-select: none;">
+                <div class="custom-checkbox-wrap">
+                  <input type="checkbox" id="termsAgree" name="termsAgree" required style="display: none;">
+                  <label for="termsAgree" class="custom-checkbox-box"></label>
+                </div>
+                <label for="termsAgree" style="margin: 0; font-size: 13px; color: var(--muted); cursor: pointer; line-height: 1.4;">
+                  I agree to the <a href="#terms" class="legal-link">Terms & Conditions</a> and <a href="#privacy" class="legal-link">Privacy Policy</a>
+                </label>
+              </div>
+              ` : ''}
+              <button class="btn primary block lg auth-submit-btn" type="submit">
+                ${isRegister ? 'Create account' : 'Sign in'}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;margin-left:6px;"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+              </button>
+            </form>
+            <p class="auth-switch">
+              ${isRegister ? 'Already registered?' : 'Need an account?'}
+              <button class="link-button" id="switchAuth" type="button">${isRegister ? 'Sign in' : 'Create one'}</button>
+            </p>
+          </div>
         </div>
       </section>
     </main>`;
 
-  document.querySelector('#switchAuth').addEventListener('click', () => authView(isRegister ? 'login' : 'register'));
+  document.querySelector('#switchAuth').addEventListener('click', () => navigate(isRegister ? 'login' : 'register'));
   document.querySelector('#authForm').addEventListener('submit', async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -480,12 +543,12 @@ function shell(content, { search = false } = {}) {
           ${search
             ? `<label class="search"><span aria-hidden="true">${icons.search}</span><input id="globalSearch" type="search" placeholder="Search your applications…" aria-label="Search applications"></label>`
             : '<span class="rail-spacer"></span>'}
-          <div class="topbar-right">
+          <div class="topbar-right" id="topbarProfile" style="cursor: pointer;" title="Go to Profile">
             <div class="greeting">
               <div class="hi">${greetWord()},</div>
               <div class="nm">${escapeHtml(name)}</div>
             </div>
-            <div class="avatar" title="${escapeHtml(name)}">${escapeHtml(initials(name))}</div>
+            <div class="avatar">${escapeHtml(initials(name))}</div>
           </div>
         </div>
         ${content}
@@ -496,6 +559,7 @@ function shell(content, { search = false } = {}) {
   document.querySelectorAll('[data-route]').forEach((button) => {
     button.addEventListener('click', () => navigate(button.dataset.route));
   });
+  document.querySelector('#topbarProfile').addEventListener('click', () => navigate('profile'));
   document.querySelector('#logoutBtn').addEventListener('click', () => {
     clearAuth();
     authView();
@@ -1797,12 +1861,16 @@ async function settingsView() {
           <button class="btn primary" type="submit">Save Preferences</button>
         </form>
       </section>
-
       <section class="panel" style="border-color: var(--danger);">
         <div class="panel-head"><h2 style="color: var(--danger);">Danger Zone</h2></div>
         <div style="margin-bottom: 12px; color: var(--muted);">Permanently delete your account and all associated data. This action cannot be undone.</div>
         <button class="btn danger" id="deleteAccountBtn">Delete Account</button>
       </section>
+    </div>
+    <div style="margin-top: 32px; display: flex; justify-content: center; gap: 20px; font-size: 13.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 20px;">
+      <a href="#terms" style="color: var(--muted); text-decoration: none; transition: color 0.2s;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Terms & Conditions</a>
+      <span>&bull;</span>
+      <a href="#privacy" style="color: var(--muted); text-decoration: none; transition: color 0.2s;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Privacy Policy</a>
     </div>`);
 
   document.querySelectorAll('[data-route]').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.route)));
@@ -2103,18 +2171,139 @@ async function xrayView() {
 
 
 /* ----------------------------------------------------------------
+   Legal Pages
+   ---------------------------------------------------------------- */
+async function termsView() {
+  const content = `
+    <div class="legal-card-shell">
+      <div class="legal-header">
+        <h2 class="legal-title">Terms & Conditions</h2>
+        <div class="legal-meta">Last Updated: July 2026</div>
+      </div>
+      <div class="legal-section">
+        <h3>1. Use of Service</h3>
+        <p>Welcome to CV Builder Platform. By using our website and services, you agree to comply with and be bound by the following terms and conditions. You agree to use our services only for lawful purposes and in a manner that does not infringe on the rights of, or restrict the use of this service by, any third party.</p>
+      </div>
+      <div class="legal-section">
+        <h3>2. User Accounts</h3>
+        <p>To access certain features, you must create an account. You are responsible for maintaining the confidentiality of your account credentials and password. Your personal details will be kept secure under modern JWT standards.</p>
+      </div>
+      <div class="legal-section">
+        <h3>3. Intellectual Property</h3>
+        <p>All content generated by our AI is provided for your personal use. The underlying platform, designs, and code remain the intellectual property of CV Builder.</p>
+      </div>
+      <div class="legal-section">
+        <h3>4. Termination</h3>
+        <p>We reserve the right to suspend or terminate your access to the service at any time without notice if you violate these terms.</p>
+      </div>
+      <div style="margin-top: 40px; border-top: 1px solid var(--line); padding-top: 24px; display: flex; justify-content: center;">
+        <button class="btn primary" id="btnBackToApp" style="padding: 10px 28px; font-weight: 600; border-radius: var(--r-control);">
+          ${state.token ? 'Back to Settings' : 'Back to Registration'}
+        </button>
+      </div>
+    </div>
+  `;
+  if (state.token) {
+    shell(content);
+  } else {
+    app.innerHTML = `
+      <main class="auth-shell" style="grid-template-columns: 1fr;">
+        <section class="auth-main" style="padding: 40px; justify-content: flex-start; overflow-y: auto;">
+          ${content}
+        </section>
+      </main>
+    `;
+  }
+  
+  const btn = document.querySelector('#btnBackToApp');
+  if (btn) {
+    btn.addEventListener('click', () => {
+      if (state.token) {
+        navigate('settings');
+      } else {
+        authView('register');
+      }
+    });
+  }
+}
+
+async function privacyView() {
+  const content = `
+    <div class="legal-card-shell">
+      <div class="legal-header">
+        <h2 class="legal-title">Privacy Policy</h2>
+        <div class="legal-meta">Last Updated: July 2026</div>
+      </div>
+      <div class="legal-section">
+        <h3>1. Information We Collect</h3>
+        <p>We collect information you provide directly to us, such as your name, email, CV details, and application tracking data when you register or use the platform.</p>
+      </div>
+      <div class="legal-section">
+        <h3>2. How We Use Information</h3>
+        <p>Your data is strictly used to provide the CV Builder service, generate AI cover letters, and score your profile against job descriptions. We do not sell your personal data.</p>
+      </div>
+      <div class="legal-section">
+        <h3>3. Data Security</h3>
+        <p>We implement industry-standard security measures, including bcrypt hashing for passwords and secure JWT sessions, to protect your data.</p>
+      </div>
+      <div class="legal-section">
+        <h3>4. Third-Party Sharing</h3>
+        <p>We may share necessary data points securely with AI providers (like NVIDIA) solely for the purpose of generating your requested content. No details are shared for advertising purposes.</p>
+      </div>
+      <div style="margin-top: 40px; border-top: 1px solid var(--line); padding-top: 24px; display: flex; justify-content: center;">
+        <button class="btn primary" id="btnBackToApp" style="padding: 10px 28px; font-weight: 600; border-radius: var(--r-control);">
+          ${state.token ? 'Back to Settings' : 'Back to Registration'}
+        </button>
+      </div>
+    </div>
+  `;
+  if (state.token) {
+    shell(content);
+  } else {
+    app.innerHTML = `
+      <main class="auth-shell" style="grid-template-columns: 1fr;">
+        <section class="auth-main" style="padding: 40px; justify-content: flex-start; overflow-y: auto;">
+          ${content}
+        </section>
+      </main>
+    `;
+  }
+
+  const btn = document.querySelector('#btnBackToApp');
+  if (btn) {
+    btn.addEventListener('click', () => {
+      if (state.token) {
+        navigate('settings');
+      } else {
+        authView('register');
+      }
+    });
+  }
+}
+
+/* ----------------------------------------------------------------
    Router
    ---------------------------------------------------------------- */
 async function render() {
-  if (!state.token) {
-    authView();
+  state.route = location.hash.replace('#', '') || 'dashboard';
+
+  if (!state.token && state.route !== 'terms' && state.route !== 'privacy' && state.route !== 'register' && state.route !== 'login') {
+    authView('login');
     return;
   }
 
-  state.route = location.hash.replace('#', '') || 'dashboard';
-
   try {
-    if (state.route === 'dashboard') await dashboardView();
+    if (!state.token) {
+      if (state.route === 'terms') await termsView();
+      else if (state.route === 'privacy') await privacyView();
+      else if (state.route === 'register') authView('register');
+      else authView('login');
+      return;
+    }
+
+    if (state.route === 'terms') await termsView();
+    else if (state.route === 'privacy') await privacyView();
+    else if (state.route === 'dashboard') await dashboardView();
     else if (state.route === 'profile') await profileView();
     else if (state.route === 'cv') await cvView();
     else if (state.route === 'applications') await applicationsView();

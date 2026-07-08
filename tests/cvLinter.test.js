@@ -1,4 +1,4 @@
-const { lintCvText } = require('./cvLinter');
+const { lintCvText } = require('../utils/cvLinter');
 
 describe('Resume Language Quality Linter', () => {
   it('flags passive voice', () => {

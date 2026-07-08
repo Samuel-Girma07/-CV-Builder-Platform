@@ -1,4 +1,4 @@
-const { evaluateJobDescription } = require('./redFlagRules');
+const { evaluateJobDescription } = require('../utils/redFlagRules');
 
 describe('Job Posting Red-Flag Scorer', () => {
   it('should return 0 score and empty flags for a completely clean, legitimate job post', () => {

@@ -1,6 +1,30 @@
 const pool = require('../config/db');
 const { analyzePdfBuffer } = require('../utils/atsXray');
 
+/**
+ * PostgreSQL rejects JSON that contains Unicode null bytes (\u0000) and some
+ * other unsupported escape sequences. This helper walks any value and strips
+ * those characters from every string so the INSERT never fails.
+ */
+function sanitizeForPg(value) {
+  if (typeof value === 'string') {
+    // Remove null bytes and other control characters that PostgreSQL rejects
+    // eslint-disable-next-line no-control-regex
+    return value.replace(/\u0000/g, '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+  }
+  if (Array.isArray(value)) {
+    return value.map(sanitizeForPg);
+  }
+  if (value !== null && typeof value === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = sanitizeForPg(v);
+    }
+    return out;
+  }
+  return value;
+}
+
 const xrayController = {
   async uploadXray(req, res, next) {
     try {
@@ -23,10 +47,13 @@ const xrayController = {
         });
       }
 
-      // Save to cv_versions
+      // Save to cv_versions — sanitise all strings first so PostgreSQL never
+      // chokes on null bytes or other unsupported Unicode escape sequences that
+      // pdf-parse can extract verbatim from certain PDF files.
+      const safeReport = sanitizeForPg(report);
       const result = await pool.query(
         'INSERT INTO cv_versions (user_id, file_name, file_data, parsability_report) VALUES ($1, $2, $3, $4) RETURNING id',
-        [userId, fileName, buffer, JSON.stringify(report)]
+        [userId, fileName, buffer, JSON.stringify(safeReport)]
       );
 
       return res.json({ id: result.rows[0].id, report });

@@ -1,4 +1,4 @@
-const { detectCv, analyzePdfBuffer } = require('./atsXray');
+const { detectCv, analyzePdfBuffer } = require('../utils/atsXray');
 
 describe('detectCv', () => {
   test('accepts a real résumé (sections + contact details)', () => {

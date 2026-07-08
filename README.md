@@ -193,16 +193,17 @@ themes that the rest of the interface is built from.
 
 ## Extra Features Beyond The Basic Requirement
 
-- PDF upload and AI parsing.
-- AI ATS matching.
-- AI cover letter generation.
-- CV PDF generation with multiple templates.
-- Cover letter PDF generation.
-- Rate limiting on authentication and AI endpoints.
-- Leveled application logging to console and file.
-- A custom dark-first design system with a design-system proof page.
-- Structured API documentation.
-- ER diagram documentation.
+- **ATS X-Ray Scanner:** Diagnostic tool that parses raw PDFs to check for ATS readability, font extraction issues, and hidden text.
+- **CV Linter & Red Flag Detection:** Rule-based analysis engine to detect common CV mistakes (e.g., missing metrics, generic action verbs, excessive buzzwords).
+- **Comprehensive Testing Suite:** Fully automated unit and integration tests using Jest and Supertest (`npm test`) covering API endpoints and AI utilities.
+- **AI PDF Parsing & Structuring:** Upload a raw PDF resume and let AI extract and structure it into the platform's schema.
+- **AI ATS Matching & Scoring:** Automatically match structured CV data against job descriptions for a granular ATS score.
+- **AI Cover Letter Generation:** Generate tailored cover letters with selectable tones (professional, enthusiastic, direct).
+- **Multi-template PDF Generation:** Generate tailored CV PDFs and Cover Letter PDFs server-side via PDFKit.
+- **Rate Limiting:** IP-based rate limiting on authentication and AI endpoints to prevent abuse.
+- **Advanced UI/UX System:** Custom dark-first design system featuring a dynamic vanilla-JS SPA, interactive data grids, glassmorphic auth panels, and premium legal compliance pages.
+- **Logging & Monitoring:** Leveled application logging to both console and file.
+- **Detailed Documentation:** Structured API documentation and Database ER diagrams.
 
 ## Scripts
 
