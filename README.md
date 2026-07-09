@@ -102,6 +102,13 @@ NVIDIA_API_KEY=replace_with_your_nvidia_api_key
 NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_MODEL=qwen/qwen3-next-80b-a3b-instruct
 PORT=3000
+
+# Email Configuration (e.g., Mailtrap for local dev)
+SMTP_HOST=sandbox.smtp.mailtrap.io
+SMTP_PORT=2525
+SMTP_USER=your_mailtrap_user
+SMTP_PASS=your_mailtrap_password
+SMTP_FROM="CV Builder Platform" <no-reply@cvbuilder.com>
 ```
 
 The app requires `DATABASE_URL`, `JWT_SECRET`, and `NVIDIA_API_KEY` at startup.
@@ -193,7 +200,7 @@ themes that the rest of the interface is built from.
 
 ## Extra Features Beyond The Basic Requirement
 
-- **Password Recovery/Forgot Password:** Secure token-based password reset flow with Nodemailer integration. Includes an automated database migration on startup and a fail-safe local dev/demo fallback that prints reset links directly to the console and in-app to prevent blockers during offline grading.
+- **Password Recovery/Forgot Password:** Secure token-based temporary password recovery flow with Nodemailer/Mailtrap integration. Automatically mandates users to set a new password upon logging in with their temporary credentials. Includes a fail-safe local dev/demo fallback that prints temporary passwords directly to the console and in-app to prevent blockers during offline grading.
 - **ATS X-Ray Scanner:** Diagnostic tool that parses raw PDFs to check for ATS readability, font extraction issues, and hidden text.
 - **CV Linter & Red Flag Detection:** Rule-based analysis engine to detect common CV mistakes (e.g., missing metrics, generic action verbs, excessive buzzwords).
 - **Comprehensive Testing Suite:** Fully automated unit and integration tests using Jest and Supertest (`npm test`) covering API endpoints and AI utilities.
