@@ -311,6 +311,55 @@ input[type="file"]::file-selector-button {
   cursor: pointer;
 }
 
+/* Password show/hide toggle */
+.pw-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.pw-wrap input {
+  flex: 1;
+  padding-right: 44px;
+}
+
+.pw-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.pw-toggle:hover {
+  color: var(--text);
+  background: var(--surface-3);
+}
+
+.pw-toggle svg {
+  width: 17px;
+  height: 17px;
+  pointer-events: none;
+}
+
+/* In auth forms the inputs already have auth-input-wrap; extend it */
+.auth-input-wrap.pw-wrap input {
+  padding-left: 42px;
+  padding-right: 44px;
+}
+
 .actions {
   display: flex;
   align-items: center;

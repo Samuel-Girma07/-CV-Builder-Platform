@@ -33,7 +33,9 @@ const icons = {
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>',
   settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>',
   calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>',
-  xray: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.2 15c.7-1.2 1-2.5.7-3.9-.6-2-2.4-3.5-4.4-3.5h-1.2c-.7-3-3.2-5.2-6.2-5.6-3-.3-5.9 1.3-7.3 4-1.2 2.5-1 6.5.5 8.8m8.7-1.6V21"/><path d="M16 16v5"/><path d="M8 16v5"/></svg>'
+  xray: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.2 15c.7-1.2 1-2.5.7-3.9-.6-2-2.4-3.5-4.4-3.5h-1.2c-.7-3-3.2-5.2-6.2-5.6-3-.3-5.9 1.3-7.3 4-1.2 2.5-1 6.5.5 8.8m8.7-1.6V21"/><path d="M16 16v5"/><path d="M8 16v5"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
 };
 
 /* ----------------------------------------------------------------
@@ -280,6 +282,21 @@ function clampBlock(innerHtml, lines = 10, extraClass = '') {
 
 // Activates clamp toggles after render. Hides the toggle when the content does
 // not actually overflow the clamp, so short text has no dangling "See more".
+/* Attach eye-toggle behaviour to every .pw-toggle in the current view. */
+function wirePwToggles(root = document) {
+  root.querySelectorAll('.pw-toggle').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const wrap = btn.closest('.pw-wrap');
+      const input = wrap && wrap.querySelector('input');
+      if (!input) return;
+      const showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      btn.innerHTML = showing ? icons.eye : icons.eyeOff;
+      btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+    });
+  });
+}
+
 function wireClamps(root = document) {
   root.querySelectorAll('.clampable').forEach((wrap) => {
     const body = wrap.querySelector('.clamp-body');
@@ -450,9 +467,10 @@ function authView(mode = 'login') {
               </div>
               <div class="field auth-field">
                 <label for="password">Password</label>
-                <div class="auth-input-wrap">
+                <div class="auth-input-wrap pw-wrap">
                   <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                   <input id="password" name="password" type="password" autocomplete="${isRegister ? 'new-password' : 'current-password'}" placeholder="At least 8 characters" minlength="8" required>
+                  <button class="pw-toggle" type="button" aria-label="Show password">${icons.eye}</button>
                 </div>
               </div>
               ${isRegister ? `
@@ -481,6 +499,8 @@ function authView(mode = 'login') {
     </main>`;
 
   document.querySelector('#switchAuth').addEventListener('click', () => navigate(isRegister ? 'login' : 'register'));
+
+  wirePwToggles();
 
   document.querySelector('#authForm').addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -1848,11 +1868,17 @@ async function settingsView() {
           <input type="text" name="email" value="${escapeHtml(state.user.email)}" autocomplete="username" style="display: none;" readonly>
           <div class="field">
             <label for="currentPassword">Current Password</label>
-            <input id="currentPassword" name="currentPassword" type="password" autocomplete="current-password" required>
+            <div class="pw-wrap">
+              <input id="currentPassword" name="currentPassword" type="password" autocomplete="current-password" required>
+              <button class="pw-toggle" type="button" aria-label="Show password">${icons.eye}</button>
+            </div>
           </div>
           <div class="field">
             <label for="newPassword">New Password</label>
-            <input id="newPassword" name="newPassword" type="password" autocomplete="new-password" required>
+            <div class="pw-wrap">
+              <input id="newPassword" name="newPassword" type="password" autocomplete="new-password" required>
+              <button class="pw-toggle" type="button" aria-label="Show password">${icons.eye}</button>
+            </div>
           </div>
           <button class="btn primary" type="submit">Change Password</button>
         </form>
@@ -1885,6 +1911,7 @@ async function settingsView() {
     </div>`);
 
   document.querySelectorAll('[data-route]').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.route)));
+  wirePwToggles();
 
   document.querySelector('#detailsForm').addEventListener('submit', async (e) => {
     e.preventDefault();
