@@ -14,6 +14,7 @@ function publicUser(user) {
     email: user.email,
     fullName: user.full_name,
     createdAt: user.created_at,
+    mustChangePassword: user.must_change_password || false,
   };
 }
 
@@ -109,9 +110,16 @@ const authController = {
         return res.status(401).json({ error: 'Invalid email or password.' });
       }
 
+      if (user.must_change_password) {
+        if (user.reset_token_expires && new Date() > new Date(user.reset_token_expires)) {
+          return res.status(401).json({ error: 'Temporary password has expired. Please request a new one.' });
+        }
+      }
+
       return res.json({
         token: signToken(user),
         user: publicUser(user),
+        requirePasswordChange: user.must_change_password || false,
       });
     } catch (err) {
       return next(err);
@@ -202,30 +210,25 @@ const authController = {
       }
 
       const user = await userQuery.findByEmail(email.toLowerCase().trim());
-      // Security best practice: Do not disclose if user exists
       if (!user) {
-        return res.json({
-          message: 'If an account exists with that email, a password reset link has been sent.',
-        });
+        return res.status(404).json({ error: 'Email address not found in our system.' });
       }
 
-      const token = crypto.randomBytes(32).toString('hex');
+      const tempPassword = crypto.randomBytes(4).toString('hex'); // 8 characters
+      const passwordHash = await bcrypt.hash(tempPassword, SALT_ROUNDS);
       const expiresAt = new Date(Date.now() + 3600000); // 1 hour
 
-      await userQuery.setResetToken(user.id, token, expiresAt);
+      await userQuery.setTemporaryPassword(user.id, passwordHash, expiresAt);
 
-      // Create reset link pointing to the front-end SPA route structure (hash routing)
-      const resetLink = `${req.protocol}://${req.get('host')}/#reset-password?token=${token}`;
-
-      const emailSent = await sendResetEmail(user.email, resetLink);
+      const emailSent = await sendResetEmail(user.email, tempPassword);
 
       const response = {
-        message: 'If an account exists with that email, a password reset link has been sent.',
+        message: 'A temporary password has been sent to your email address.',
       };
 
-      // In local dev/demo environment without SMTP configured, return the reset url directly so it's impossible to get stuck during evaluation/presentation
+      // In local dev/demo environment without SMTP configured, return the temporary password directly
       if (!emailSent) {
-        response.devResetLink = resetLink;
+        response.devTempPassword = tempPassword;
       }
 
       return res.json(response);
@@ -234,33 +237,6 @@ const authController = {
     }
   },
 
-  async resetPassword(req, res, next) {
-    try {
-      const { token, newPassword } = req.body;
-      if (!token || !newPassword) {
-        return res.status(400).json({ error: 'Token and new password are required.' });
-      }
-
-      if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
-        return res.status(400).json({
-          error: 'New password must be at least 8 characters, include an uppercase letter and a number.',
-        });
-      }
-
-      const user = await userQuery.findByResetToken(token);
-      if (!user) {
-        return res.status(400).json({ error: 'Invalid or expired password reset token.' });
-      }
-
-      const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
-      await userQuery.updatePassword(user.id, passwordHash);
-      await userQuery.clearResetToken(user.id);
-
-      return res.json({ message: 'Your password has been successfully reset. You can now log in.' });
-    } catch (err) {
-      return next(err);
-    }
-  },
 };
 
 module.exports = authController;

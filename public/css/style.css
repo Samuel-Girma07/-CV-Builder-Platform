@@ -238,7 +238,7 @@ a {
    ---------------------------------------------------------------- */
 .form {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .field {
@@ -1621,7 +1621,7 @@ button.row:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 16px;
 }
 
 .auth-card {
@@ -1636,7 +1636,7 @@ button.row:hover {
   border-radius: 12px;
   display: grid;
   place-items: center;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
   color: var(--accent);
 }
 
@@ -1690,7 +1690,7 @@ button.row:hover {
 }
 
 .auth-switch {
-  margin-top: 20px;
+  margin-top: 16px;
   font-size: 14px;
   color: var(--muted);
 }

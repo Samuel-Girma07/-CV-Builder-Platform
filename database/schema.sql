@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS users (
   full_name VARCHAR(255),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   reset_token VARCHAR(255),
-  reset_token_expires TIMESTAMP
+  reset_token_expires TIMESTAMP,
+  must_change_password BOOLEAN DEFAULT false
 );
 
 -- Profiles table (stores structured CV data as JSONB)

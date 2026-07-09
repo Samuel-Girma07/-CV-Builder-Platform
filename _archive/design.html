@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CV Builder — Design System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Schibsted+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+      /* Page-local layout for the proof sheet only */
+      .proof { max-width: 1080px; margin: 0 auto; padding: 32px 22px 80px; }
+      .proof header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
+      .proof h1 { font-size: 26px; }
+      .proof section { margin-top: 40px; }
+      .proof .sec-label { margin-bottom: 16px; }
+      .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+      .sw { border: 1px solid var(--line); border-radius: var(--r-tile); overflow: hidden; }
+      .sw .chip { height: 64px; }
+      .sw .meta { padding: 10px 12px; font-size: 12px; }
+      .sw .meta b { display: block; font-family: var(--font-display); }
+      .sw .meta span { color: var(--muted); }
+      .type-row { display: grid; gap: 6px; padding: 14px 0; border-top: 1px solid var(--line); }
+      .type-row:first-of-type { border-top: 0; }
+      .type-row small { color: var(--faint); font-size: 12px; }
+      .demo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; align-items: start; }
+    </style>
+  </head>
+  <body>
+    <div class="proof">
+      <header>
+        <div>
+          <div class="eyebrow">CV Builder Platform</div>
+          <h1>Design System</h1>
+        </div>
+        <button class="btn ghost" id="themeBtn">Toggle theme</button>
+      </header>
+
+      <section>
+        <div class="eyebrow sec-label">Surfaces &amp; accent</div>
+        <div class="swatches">
+          <div class="sw"><div class="chip" style="background:var(--canvas)"></div><div class="meta"><b>Canvas</b><span>--canvas</span></div></div>
+          <div class="sw"><div class="chip" style="background:var(--surface)"></div><div class="meta"><b>Surface</b><span>--surface</span></div></div>
+          <div class="sw"><div class="chip" style="background:var(--surface-2)"></div><div class="meta"><b>Inset</b><span>--surface-2</span></div></div>
+          <div class="sw"><div class="chip" style="background:var(--accent)"></div><div class="meta"><b>Accent</b><span>--accent</span></div></div>
+          <div class="sw"><div class="chip" style="background:var(--mint)"></div><div class="meta"><b>Mint panel</b><span>--mint</span></div></div>
+        </div>
+        <div class="swatches" style="margin-top:12px">
+          <div class="sw"><div class="chip" style="background:var(--tile-amber)"></div><div class="meta"><b>Tile amber</b><span>metric tiles only</span></div></div>
+          <div class="sw"><div class="chip" style="background:var(--tile-coral)"></div><div class="meta"><b>Tile coral</b><span>metric tiles only</span></div></div>
+          <div class="sw"><div class="chip" style="background:var(--tile-teal)"></div><div class="meta"><b>Tile teal</b><span>metric tiles only</span></div></div>
+          <div class="sw"><div class="chip" style="background:var(--tile-slate)"></div><div class="meta"><b>Tile slate</b><span>metric tiles only</span></div></div>
+        </div>
+      </section>
+
+      <section>
+        <div class="eyebrow sec-label">Typography — Space Grotesk + Schibsted Grotesk</div>
+        <div class="panel">
+          <div class="type-row"><span class="num" style="font-size:48px">124</span><small>Display / metric · Space Grotesk 600</small></div>
+          <div class="type-row"><h1>Career documents, scored and ready</h1><small>H1 · 22–40px</small></div>
+          <div class="type-row"><h2>Recent applications</h2><small>H2 · 17px</small></div>
+          <div class="type-row"><p style="margin:0">Body copy uses Schibsted Grotesk for long-form readability across forms, lists, and generated letters.</p><small>Body · 15px</small></div>
+          <div class="type-row"><span class="eyebrow">Section label</span><small>Eyebrow · 11px uppercase</small></div>
+        </div>
+      </section>
+
+      <section>
+        <div class="eyebrow sec-label">Buttons &amp; states</div>
+        <div class="actions">
+          <button class="btn primary">Primary</button>
+          <button class="btn">Secondary</button>
+          <button class="btn ghost">Ghost</button>
+          <button class="btn danger">Danger</button>
+          <button class="btn primary" disabled>Disabled</button>
+          <button class="btn primary"><span class="spin"></span> Working…</button>
+        </div>
+        <div style="margin-top:14px" class="segment">
+          <button class="active">New application</button>
+          <button>Upload CV</button>
+        </div>
+      </section>
+
+      <section>
+        <div class="eyebrow sec-label">Inputs</div>
+        <div class="demo-grid">
+          <div class="field"><label>Job title</label><input placeholder="Senior Frontend Engineer"></div>
+          <div class="field"><label>Tone</label><select><option>Formal</option><option>Confident</option><option>Concise</option></select></div>
+          <div class="field" style="grid-column:1/-1"><label>Job description</label><textarea placeholder="Paste the job description…"></textarea></div>
+        </div>
+      </section>
+
+      <section>
+        <div class="eyebrow sec-label">Metric tiles &amp; badges</div>
+        <div class="tile-row">
+          <button class="tile amber"><div class="tile-top"><span class="tile-mark">AC</span><div class="tile-co"><div class="role">Frontend Engineer</div><div class="org">Acme Corp</div></div></div><div class="tile-score">82%</div><span class="tile-foot">▲ Strong match</span></button>
+          <button class="tile coral"><div class="tile-top"><span class="tile-mark">NB</span><div class="tile-co"><div class="role">Product Designer</div><div class="org">Nimbus</div></div></div><div class="tile-score">61%</div><span class="tile-foot">▲ Partial match</span></button>
+          <button class="tile teal"><div class="tile-top"><span class="tile-mark">OR</span><div class="tile-co"><div class="role">Data Analyst</div><div class="org">Orbit</div></div></div><div class="tile-score">74%</div><span class="tile-foot">▲ Good match</span></button>
+          <button class="tile slate"><div class="tile-top"><span class="tile-mark">PX</span><div class="tile-co"><div class="role">Backend Dev</div><div class="org">Pylon X</div></div></div><div class="tile-score">38%</div><span class="tile-foot">▼ Low match</span></button>
+        </div>
+        <div class="actions" style="margin-top:14px">
+          <span class="score high">82%</span>
+          <span class="score mid">61%</span>
+          <span class="score">38%</span>
+          <span class="tag">JavaScript</span>
+          <span class="tag">PostgreSQL</span>
+        </div>
+      </section>
+
+      <section>
+        <div class="eyebrow sec-label">States — empty, error, skeleton, loader</div>
+        <div class="demo-grid">
+          <div class="panel">
+            <div class="state">
+              <div class="state-ico">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+              </div>
+              <h3>No applications yet</h3>
+              <p>Create your first application to see ATS scores here.</p>
+              <button class="btn primary">New application</button>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="state error">
+              <div class="state-ico">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+              </div>
+              <h3>Something went wrong</h3>
+              <p>The AI service did not respond. Please try again.</p>
+              <button class="btn">Retry</button>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="skel line" style="width:60%"></div>
+            <div class="skel block"></div>
+            <div class="skel line" style="width:40%"></div>
+          </div>
+        </div>
+        <div class="panel" style="margin-top:16px">
+          <div class="loader-card" style="box-shadow:none;border:0;background:transparent">
+            <div class="loader-ring"></div>
+            <div class="l-title">Parsing your CV</div>
+            <div class="l-status">Extracting experience…</div>
+            <div class="loader-steps"><span class="on"></span><span class="on"></span><span></span><span></span></div>
+            <div class="l-timer">4s elapsed</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      document.querySelector('#themeBtn').addEventListener('click', () => {
+        const html = document.documentElement;
+        html.dataset.theme = html.dataset.theme === 'dark' ? 'light' : 'dark';
+      });
+    </script>
+  </body>
+</html>

@@ -19,7 +19,7 @@ const userQuery = {
    */
   async findByEmail(email) {
     const result = await pool.query(
-      `SELECT id, email, password_hash, full_name, created_at
+      `SELECT id, email, password_hash, full_name, created_at, must_change_password, reset_token_expires
        FROM users WHERE email = $1`,
       [email]
     );
@@ -31,7 +31,7 @@ const userQuery = {
    */
   async findById(id) {
     const result = await pool.query(
-      `SELECT id, email, full_name, created_at
+      `SELECT id, email, full_name, created_at, must_change_password
        FROM users WHERE id = $1`,
       [id]
     );
@@ -53,12 +53,12 @@ const userQuery = {
   },
 
   /**
-   * Update a user's password hash.
+   * Update a user's password hash and clear any temporary password flags.
    */
   async updatePassword(id, passwordHash) {
     const result = await pool.query(
       `UPDATE users
-       SET password_hash = $2
+       SET password_hash = $2, must_change_password = false, reset_token_expires = NULL
        WHERE id = $1
        RETURNING id`,
       [id, passwordHash]
@@ -78,15 +78,15 @@ const userQuery = {
   },
 
   /**
-   * Set a reset token and its expiration for a user.
+   * Set a temporary password flag and expiration for a user.
    */
-  async setResetToken(id, token, expiresAt) {
+  async setTemporaryPassword(id, passwordHash, expiresAt) {
     const result = await pool.query(
       `UPDATE users
-       SET reset_token = $2, reset_token_expires = $3
+       SET password_hash = $2, must_change_password = true, reset_token_expires = $3
        WHERE id = $1
        RETURNING id`,
-      [id, token, expiresAt]
+      [id, passwordHash, expiresAt]
     );
     return result.rows[0] || null;
   },

@@ -22,6 +22,10 @@ async function authMiddleware(req, res, next) {
       return res.status(401).json({ error: 'User account no longer exists.' });
     }
 
+    if (user.must_change_password && req.originalUrl !== '/api/auth/update-password') {
+      return res.status(403).json({ error: 'You must change your temporary password to proceed.' });
+    }
+
     req.user = user;
     return next();
   } catch (err) {

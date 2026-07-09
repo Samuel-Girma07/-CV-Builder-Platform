@@ -477,7 +477,7 @@ function authView(mode = 'login') {
                 </div>
               </div>
               ${isRegister ? `
-              <div style="display: flex; align-items: center; gap: 10px; margin: 4px 0 20px 0; user-select: none;">
+              <div style="display: flex; align-items: center; gap: 10px; margin: 4px 0 12px 0; user-select: none;">
                 <div class="custom-checkbox-wrap">
                   <input type="checkbox" id="termsAgree" name="termsAgree" required style="display: none;">
                   <label for="termsAgree" class="custom-checkbox-box"></label>
@@ -525,7 +525,11 @@ function authView(mode = 'login') {
       if (isRegister) {
         sessionStorage.setItem('just_registered', '1');
       }
-      navigate('dashboard');
+      if (data.requirePasswordChange) {
+        navigate('update-password');
+      } else {
+        navigate('dashboard');
+      }
       await render();
     } catch (err) {
       showToast(err.message, 'error');
@@ -537,17 +541,43 @@ function authView(mode = 'login') {
 async function forgotPasswordView() {
   app.innerHTML = `
     <main class="auth-shell">
-      <aside class="auth-sidebar">
-        <div class="auth-sidebar-decoration">
-          <div class="decoration-box-1"></div>
-          <div class="decoration-box-2">
-            <div class="cv-md-header"></div>
+      <aside class="auth-aside">
+        <div class="brand-row" style="position: relative; z-index: 2;">
+          <span class="logo">${icons.logo}</span>
+          <span class="brand-name">CV Builder</span>
+        </div>
+        
+        <div class="cv-mock-visual">
+          <div class="cv-mock-doc">
+            <div class="cv-md-header">
+              <div class="cv-md-avatar"></div>
+              <div class="cv-md-h-lines">
+                <div class="cv-md-line h1"></div>
+                <div class="cv-md-line sub"></div>
+              </div>
+            </div>
             <div class="cv-md-body">
-              <div class="cv-md-line title"></div>
-              <div class="cv-md-line subtitle"></div>
-              <div class="cv-md-line body"></div>
-              <div class="cv-md-line body"></div>
-              <div class="cv-md-line body"></div>
+              <div class="cv-md-section">
+                <div class="cv-md-sec-title"></div>
+                <div class="cv-md-line block"></div>
+                <div class="cv-md-line block"></div>
+                <div class="cv-md-line block short"></div>
+              </div>
+              <div class="cv-md-section">
+                <div class="cv-md-sec-title"></div>
+                <div class="cv-md-item">
+                  <div class="cv-md-dot"></div>
+                  <div class="cv-md-line thin"></div>
+                </div>
+                <div class="cv-md-item">
+                  <div class="cv-md-dot"></div>
+                  <div class="cv-md-line thin"></div>
+                </div>
+                <div class="cv-md-item">
+                  <div class="cv-md-dot"></div>
+                  <div class="cv-md-line thin shorter"></div>
+                </div>
+              </div>
             </div>
             <div class="cv-md-stamp">ATS Optimized</div>
           </div>
@@ -566,7 +596,7 @@ async function forgotPasswordView() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
             </div>
             <h2>Forgot password?</h2>
-            <p>No worries, we'll send you recovery instructions.</p>
+            <p>No worries, we'll send a temporary password to your email.</p>
             <form class="form" id="forgotForm" novalidate>
               <div class="field auth-field">
                 <label for="email">Email Address</label>
@@ -575,16 +605,16 @@ async function forgotPasswordView() {
                   <input id="email" name="email" type="email" autocomplete="email" placeholder="you@email.com" required>
                 </div>
               </div>
-              <button class="btn primary" type="submit" style="width: 100%; margin-top: 10px;">Send Link</button>
+              <button class="btn primary" type="submit" style="width: 100%; margin-top: 10px;">Send Temporary Password</button>
             </form>
             
             <div id="devLinkContainer" style="display: none; margin-top: 20px; padding: 15px; border-radius: 8px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); font-size: 13px; text-align: left;">
               <div style="font-weight: 600; color: var(--accent); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
                 <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #3b82f6; animation: pulse 2s infinite;"></span>
-                Local Demo Mode Link:
+                Local Demo Mode Password:
               </div>
               <div style="color: var(--muted); margin-bottom: 8px; font-size: 12px; line-height: 1.4;">
-                SMTP is not configured in .env. Use this link directly to simulate email delivery:
+                SMTP is not configured in .env. Here is the generated temporary password:
               </div>
               <div style="display: flex; gap: 8px; align-items: center;">
                 <input id="devLinkInput" readonly style="flex: 1; font-size: 12px; padding: 6px 10px; background: var(--surface-3); border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text);" />
@@ -615,16 +645,19 @@ async function forgotPasswordView() {
       const res = await api.post('/api/auth/forgot-password', { email: emailInput });
       showToast(res.message, 'info');
       
-      if (res.devResetLink) {
+      if (res.devTempPassword) {
         devLinkContainer.style.display = 'block';
         const linkInput = document.querySelector('#devLinkInput');
-        linkInput.value = res.devResetLink;
+        linkInput.value = res.devTempPassword;
 
         const copyBtn = document.querySelector('#devLinkCopy');
         copyBtn.onclick = () => {
-          navigator.clipboard.writeText(res.devResetLink);
-          showToast('Reset link copied to clipboard!');
+          navigator.clipboard.writeText(res.devTempPassword);
+          showToast('Temporary password copied to clipboard!');
         };
+      } else {
+        navigate('login');
+        await render();
       }
     } catch (err) {
       showToast(err.message, 'error');
@@ -634,67 +667,42 @@ async function forgotPasswordView() {
   });
 }
 
-async function resetPasswordView(token) {
-  if (!token) {
-    showToast('Missing reset token. Please request another link.', 'error');
-    navigate('login');
-    return;
-  }
-
+async function updatePasswordView() {
   app.innerHTML = `
     <main class="auth-shell">
-      <aside class="auth-sidebar">
-        <div class="auth-sidebar-decoration">
-          <div class="decoration-box-1"></div>
-          <div class="decoration-box-2">
-            <div class="cv-md-header"></div>
-            <div class="cv-md-body">
-              <div class="cv-md-line title"></div>
-              <div class="cv-md-line subtitle"></div>
-              <div class="cv-md-line body"></div>
-              <div class="cv-md-line body"></div>
-              <div class="cv-md-line body"></div>
-            </div>
-            <div class="cv-md-stamp">ATS Optimized</div>
-          </div>
-        </div>
-
-        <div class="auth-hero" style="position: relative; z-index: 2;">
-          <h1>Reset your password.</h1>
-          <p>Choose a secure, new password containing at least 8 characters, an uppercase letter, and a number.</p>
-        </div>
-      </aside>
-      <section class="auth-main">
-        <div class="auth-card">
+      <section class="auth-main" style="width: 100%; justify-content: center; grid-column: 1 / -1;">
+        <div class="auth-card" style="max-width: 450px;">
           <div class="auth-card-top-bar"></div>
           <div class="auth-card-inner">
             <div class="auth-card-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
             </div>
-            <h2>New Password</h2>
-            <p>Update your credentials below.</p>
-            <form class="form" id="resetForm" novalidate>
+            <h2>Update Password</h2>
+            <p>You are logging in with a temporary password. You must create a new secure password to proceed.</p>
+            <form class="form" id="forcePwForm" novalidate>
               <div class="field auth-field">
-                <label for="password">Password</label>
-                <div class="auth-input-wrap pw-wrap">
-                  <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                  <input id="password" name="password" type="password" placeholder="At least 8 characters" minlength="8" required>
-                  <button class="pw-toggle" type="button" aria-label="Show password">${icons.eye}</button>
+                <label for="currentPassword">Temporary Password</label>
+                <div class="pw-wrap">
+                  <input id="currentPassword" name="currentPassword" type="password" autocomplete="off" required>
+                  <button type="button" class="pw-toggle" aria-label="Show password">${icons.eyeOff}</button>
                 </div>
               </div>
               <div class="field auth-field">
-                <label for="confirmPassword">Confirm Password</label>
-                <div class="auth-input-wrap pw-wrap">
-                  <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                  <input id="confirmPassword" name="confirmPassword" type="password" placeholder="Re-enter new password" minlength="8" required>
-                  <button class="pw-toggle" type="button" aria-label="Show password">${icons.eye}</button>
+                <label for="newPassword">New Password</label>
+                <div class="pw-wrap">
+                  <input id="newPassword" name="newPassword" type="password" autocomplete="new-password" placeholder="At least 8 characters, 1 uppercase, 1 number" required>
+                  <button type="button" class="pw-toggle" aria-label="Show password">${icons.eyeOff}</button>
                 </div>
               </div>
-              <button class="btn primary" type="submit" style="width: 100%; margin-top: 10px;">Update Password</button>
+              <div class="field auth-field">
+                <label for="confirmPassword">Confirm New Password</label>
+                <div class="pw-wrap">
+                  <input id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" placeholder="Re-enter your new password" required>
+                  <button type="button" class="pw-toggle" aria-label="Show password">${icons.eyeOff}</button>
+                </div>
+              </div>
+              <button class="btn primary" type="submit" style="width: 100%; margin-top: 10px;">Save New Password</button>
             </form>
-            <p class="auth-switch" style="margin-top: 24px;">
-              <a href="#login" style="color: var(--muted); text-decoration: none; font-size: 13.5px; font-weight: 500; transition: color 0.15s;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Back to Sign In</a>
-            </p>
           </div>
         </div>
       </section>
@@ -703,22 +711,25 @@ async function resetPasswordView(token) {
 
   wirePwToggles();
 
-  document.querySelector('#resetForm').addEventListener('submit', async (e) => {
+  document.querySelector('#forcePwForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const newPassword = form.querySelector('#password').value;
+    
+    const newPassword = form.querySelector('#newPassword').value;
     const confirmPassword = form.querySelector('#confirmPassword').value;
-
+    
     if (newPassword !== confirmPassword) {
-      showToast('Passwords do not match.', 'error');
+      showToast('New passwords do not match.', 'error');
       return;
     }
 
-    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Updating…');
+    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Saving…');
     try {
-      const res = await api.post('/api/auth/reset-password', { token, newPassword });
-      showToast(res.message, 'info');
-      navigate('login');
+      await api.post('/api/auth/update-password', Object.fromEntries(new FormData(form)));
+      state.user.mustChangePassword = false;
+      showToast('Password changed successfully.');
+      navigate('dashboard');
+      await render();
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -2134,7 +2145,7 @@ async function settingsView() {
     const form = e.currentTarget;
     const restore = setBtnLoading(e.submitter, 'Changing…');
     try {
-      await api.put('/api/auth/password', Object.fromEntries(new FormData(form)));
+      await api.post('/api/auth/update-password', Object.fromEntries(new FormData(form)));
       showToast('Password changed successfully.');
       form.reset();
     } catch (err) {
@@ -2534,9 +2545,14 @@ async function render() {
     });
   }
 
-  const publicRoutes = ['terms', 'privacy', 'register', 'login', 'forgot-password', 'reset-password'];
+  const publicRoutes = ['terms', 'privacy', 'register', 'login', 'forgot-password'];
   if (!state.token && !publicRoutes.includes(state.route)) {
     authView('login');
+    return;
+  }
+
+  if (state.token && state.user?.mustChangePassword && state.route !== 'update-password') {
+    navigate('update-password');
     return;
   }
 
@@ -2546,7 +2562,6 @@ async function render() {
       else if (state.route === 'privacy') await privacyView();
       else if (state.route === 'register') authView('register');
       else if (state.route === 'forgot-password') await forgotPasswordView();
-      else if (state.route === 'reset-password') await resetPasswordView(queryParams.token);
       else authView('login');
       return;
     }
@@ -2561,7 +2576,7 @@ async function render() {
     else if (state.route === 'settings') await settingsView();
     else if (state.route === 'xray') await xrayView();
     else if (state.route === 'forgot-password') await forgotPasswordView();
-    else if (state.route === 'reset-password') await resetPasswordView(queryParams.token);
+    else if (state.route === 'update-password') await updatePasswordView();
     else if (state.route.startsWith('application:')) await applicationDetailView(state.route.split(':')[1]);
     else {
       state.route = 'dashboard';
