@@ -76,6 +76,47 @@ const userQuery = {
     );
     return result.rows[0] || null;
   },
+
+  /**
+   * Set a reset token and its expiration for a user.
+   */
+  async setResetToken(id, token, expiresAt) {
+    const result = await pool.query(
+      `UPDATE users
+       SET reset_token = $2, reset_token_expires = $3
+       WHERE id = $1
+       RETURNING id`,
+      [id, token, expiresAt]
+    );
+    return result.rows[0] || null;
+  },
+
+  /**
+   * Find a user with a valid, non-expired reset token.
+   */
+  async findByResetToken(token) {
+    const result = await pool.query(
+      `SELECT id, email, password_hash, full_name, created_at
+       FROM users
+       WHERE reset_token = $1 AND reset_token_expires > NOW()`,
+      [token]
+    );
+    return result.rows[0] || null;
+  },
+
+  /**
+   * Clear the reset token and expiration for a user.
+   */
+  async clearResetToken(id) {
+    const result = await pool.query(
+      `UPDATE users
+       SET reset_token = NULL, reset_token_expires = NULL
+       WHERE id = $1
+       RETURNING id`,
+      [id]
+    );
+    return result.rows[0] || null;
+  },
 };
 
 module.exports = userQuery;

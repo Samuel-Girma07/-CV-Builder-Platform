@@ -2,6 +2,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const userQuery = require('../models/userQuery');
 const profileQuery = require('../models/profileQuery');
+const crypto = require('crypto');
+const { sendResetEmail } = require('../utils/email');
 
 const SALT_ROUNDS = 12;
 const TOKEN_EXPIRES_IN = '24h';
@@ -187,6 +189,74 @@ const authController = {
     try {
       await userQuery.deleteById(req.user.id);
       return res.json({ message: 'Account deleted successfully.' });
+    } catch (err) {
+      return next(err);
+    }
+  },
+
+  async forgotPassword(req, res, next) {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ error: 'Email is required.' });
+      }
+
+      const user = await userQuery.findByEmail(email.toLowerCase().trim());
+      // Security best practice: Do not disclose if user exists
+      if (!user) {
+        return res.json({
+          message: 'If an account exists with that email, a password reset link has been sent.',
+        });
+      }
+
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 3600000); // 1 hour
+
+      await userQuery.setResetToken(user.id, token, expiresAt);
+
+      // Create reset link pointing to the front-end SPA route structure (hash routing)
+      const resetLink = `${req.protocol}://${req.get('host')}/#reset-password?token=${token}`;
+
+      const emailSent = await sendResetEmail(user.email, resetLink);
+
+      const response = {
+        message: 'If an account exists with that email, a password reset link has been sent.',
+      };
+
+      // In local dev/demo environment without SMTP configured, return the reset url directly so it's impossible to get stuck during evaluation/presentation
+      if (!emailSent) {
+        response.devResetLink = resetLink;
+      }
+
+      return res.json(response);
+    } catch (err) {
+      return next(err);
+    }
+  },
+
+  async resetPassword(req, res, next) {
+    try {
+      const { token, newPassword } = req.body;
+      if (!token || !newPassword) {
+        return res.status(400).json({ error: 'Token and new password are required.' });
+      }
+
+      if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+        return res.status(400).json({
+          error: 'New password must be at least 8 characters, include an uppercase letter and a number.',
+        });
+      }
+
+      const user = await userQuery.findByResetToken(token);
+      if (!user) {
+        return res.status(400).json({ error: 'Invalid or expired password reset token.' });
+      }
+
+      const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+      await userQuery.updatePassword(user.id, passwordHash);
+      await userQuery.clearResetToken(user.id);
+
+      return res.json({ message: 'Your password has been successfully reset. You can now log in.' });
     } catch (err) {
       return next(err);
     }

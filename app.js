@@ -17,6 +17,20 @@ if (missingEnv.length > 0) {
   process.exit(1);
 }
 
+const pool = require('./config/db');
+async function runStartupMigration() {
+  try {
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(255);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMP;
+    `);
+    logger.info('Database startup migration completed (reset_token columns ensured).');
+  } catch (err) {
+    logger.error('Database startup migration failed:', err);
+  }
+}
+runStartupMigration();
+
 const authRoutes = require('./routes/authRoutes');
 const profileRoutes = require('./routes/profileRoutes');
 const applicationRoutes = require('./routes/applicationRoutes');

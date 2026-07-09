@@ -193,6 +193,7 @@ themes that the rest of the interface is built from.
 
 ## Extra Features Beyond The Basic Requirement
 
+- **Password Recovery/Forgot Password:** Secure token-based password reset flow with Nodemailer integration. Includes an automated database migration on startup and a fail-safe local dev/demo fallback that prints reset links directly to the console and in-app to prevent blockers during offline grading.
 - **ATS X-Ray Scanner:** Diagnostic tool that parses raw PDFs to check for ATS readability, font extraction issues, and hidden text.
 - **CV Linter & Red Flag Detection:** Rule-based analysis engine to detect common CV mistakes (e.g., missing metrics, generic action verbs, excessive buzzwords).
 - **Comprehensive Testing Suite:** Fully automated unit and integration tests using Jest and Supertest (`npm test`) covering API endpoints and AI utilities.

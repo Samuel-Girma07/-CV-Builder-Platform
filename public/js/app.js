@@ -466,7 +466,10 @@ function authView(mode = 'login') {
                 </div>
               </div>
               <div class="field auth-field">
-                <label for="password">Password</label>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label for="password">Password</label>
+                  ${!isRegister ? `<a href="#forgot-password" style="font-size: 12.5px; color: var(--accent); text-decoration: none; font-weight: 550; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">Forgot password?</a>` : ''}
+                </div>
                 <div class="auth-input-wrap pw-wrap">
                   <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                   <input id="password" name="password" type="password" autocomplete="${isRegister ? 'new-password' : 'current-password'}" placeholder="At least 8 characters" minlength="8" required>
@@ -526,6 +529,199 @@ function authView(mode = 'login') {
       await render();
     } catch (err) {
       showToast(err.message, 'error');
+      restore();
+    }
+  });
+}
+
+async function forgotPasswordView() {
+  app.innerHTML = `
+    <main class="auth-shell">
+      <aside class="auth-sidebar">
+        <div class="auth-sidebar-decoration">
+          <div class="decoration-box-1"></div>
+          <div class="decoration-box-2">
+            <div class="cv-md-header"></div>
+            <div class="cv-md-body">
+              <div class="cv-md-line title"></div>
+              <div class="cv-md-line subtitle"></div>
+              <div class="cv-md-line body"></div>
+              <div class="cv-md-line body"></div>
+              <div class="cv-md-line body"></div>
+            </div>
+            <div class="cv-md-stamp">ATS Optimized</div>
+          </div>
+        </div>
+
+        <div class="auth-hero" style="position: relative; z-index: 2;">
+          <h1>Recover your account.</h1>
+          <p>Enter your registered email address and we'll help you secure and reset your password.</p>
+        </div>
+      </aside>
+      <section class="auth-main">
+        <div class="auth-card">
+          <div class="auth-card-top-bar"></div>
+          <div class="auth-card-inner">
+            <div class="auth-card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+            </div>
+            <h2>Forgot password?</h2>
+            <p>No worries, we'll send you recovery instructions.</p>
+            <form class="form" id="forgotForm" novalidate>
+              <div class="field auth-field">
+                <label for="email">Email Address</label>
+                <div class="auth-input-wrap">
+                  <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                  <input id="email" name="email" type="email" autocomplete="email" placeholder="you@email.com" required>
+                </div>
+              </div>
+              <button class="btn primary" type="submit" style="width: 100%; margin-top: 10px;">Send Link</button>
+            </form>
+            
+            <div id="devLinkContainer" style="display: none; margin-top: 20px; padding: 15px; border-radius: 8px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); font-size: 13px; text-align: left;">
+              <div style="font-weight: 600; color: var(--accent); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #3b82f6; animation: pulse 2s infinite;"></span>
+                Local Demo Mode Link:
+              </div>
+              <div style="color: var(--muted); margin-bottom: 8px; font-size: 12px; line-height: 1.4;">
+                SMTP is not configured in .env. Use this link directly to simulate email delivery:
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <input id="devLinkInput" readonly style="flex: 1; font-size: 12px; padding: 6px 10px; background: var(--surface-3); border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text);" />
+                <button id="devLinkCopy" class="btn" style="padding: 6px 10px; font-size: 12px; height: auto; display: flex; align-items: center; justify-content: center; gap: 4px; border-radius: 6px;">
+                  Copy
+                </button>
+              </div>
+            </div>
+
+            <p class="auth-switch" style="margin-top: 24px;">
+              <a href="#login" style="color: var(--muted); text-decoration: none; font-size: 13.5px; font-weight: 500; transition: color 0.15s;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Back to Sign In</a>
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+  `;
+
+  document.querySelector('#forgotForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Sending…');
+    const devLinkContainer = document.querySelector('#devLinkContainer');
+    devLinkContainer.style.display = 'none';
+
+    const emailInput = form.querySelector('#email').value;
+    try {
+      const res = await api.post('/api/auth/forgot-password', { email: emailInput });
+      showToast(res.message, 'info');
+      
+      if (res.devResetLink) {
+        devLinkContainer.style.display = 'block';
+        const linkInput = document.querySelector('#devLinkInput');
+        linkInput.value = res.devResetLink;
+
+        const copyBtn = document.querySelector('#devLinkCopy');
+        copyBtn.onclick = () => {
+          navigator.clipboard.writeText(res.devResetLink);
+          showToast('Reset link copied to clipboard!');
+        };
+      }
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      restore();
+    }
+  });
+}
+
+async function resetPasswordView(token) {
+  if (!token) {
+    showToast('Missing reset token. Please request another link.', 'error');
+    navigate('login');
+    return;
+  }
+
+  app.innerHTML = `
+    <main class="auth-shell">
+      <aside class="auth-sidebar">
+        <div class="auth-sidebar-decoration">
+          <div class="decoration-box-1"></div>
+          <div class="decoration-box-2">
+            <div class="cv-md-header"></div>
+            <div class="cv-md-body">
+              <div class="cv-md-line title"></div>
+              <div class="cv-md-line subtitle"></div>
+              <div class="cv-md-line body"></div>
+              <div class="cv-md-line body"></div>
+              <div class="cv-md-line body"></div>
+            </div>
+            <div class="cv-md-stamp">ATS Optimized</div>
+          </div>
+        </div>
+
+        <div class="auth-hero" style="position: relative; z-index: 2;">
+          <h1>Reset your password.</h1>
+          <p>Choose a secure, new password containing at least 8 characters, an uppercase letter, and a number.</p>
+        </div>
+      </aside>
+      <section class="auth-main">
+        <div class="auth-card">
+          <div class="auth-card-top-bar"></div>
+          <div class="auth-card-inner">
+            <div class="auth-card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <h2>New Password</h2>
+            <p>Update your credentials below.</p>
+            <form class="form" id="resetForm" novalidate>
+              <div class="field auth-field">
+                <label for="password">Password</label>
+                <div class="auth-input-wrap pw-wrap">
+                  <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  <input id="password" name="password" type="password" placeholder="At least 8 characters" minlength="8" required>
+                  <button class="pw-toggle" type="button" aria-label="Show password">${icons.eye}</button>
+                </div>
+              </div>
+              <div class="field auth-field">
+                <label for="confirmPassword">Confirm Password</label>
+                <div class="auth-input-wrap pw-wrap">
+                  <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  <input id="confirmPassword" name="confirmPassword" type="password" placeholder="Re-enter new password" minlength="8" required>
+                  <button class="pw-toggle" type="button" aria-label="Show password">${icons.eye}</button>
+                </div>
+              </div>
+              <button class="btn primary" type="submit" style="width: 100%; margin-top: 10px;">Update Password</button>
+            </form>
+            <p class="auth-switch" style="margin-top: 24px;">
+              <a href="#login" style="color: var(--muted); text-decoration: none; font-size: 13.5px; font-weight: 500; transition: color 0.15s;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Back to Sign In</a>
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+  `;
+
+  wirePwToggles();
+
+  document.querySelector('#resetForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const newPassword = form.querySelector('#password').value;
+    const confirmPassword = form.querySelector('#confirmPassword').value;
+
+    if (newPassword !== confirmPassword) {
+      showToast('Passwords do not match.', 'error');
+      return;
+    }
+
+    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Updating…');
+    try {
+      const res = await api.post('/api/auth/reset-password', { token, newPassword });
+      showToast(res.message, 'info');
+      navigate('login');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
       restore();
     }
   });
@@ -2326,9 +2522,20 @@ async function privacyView() {
    Router
    ---------------------------------------------------------------- */
 async function render() {
-  state.route = location.hash.replace('#', '') || 'dashboard';
+  const hash = location.hash.replace('#', '') || 'dashboard';
+  const [routeName, queryStr] = hash.split('?');
+  state.route = routeName;
 
-  if (!state.token && state.route !== 'terms' && state.route !== 'privacy' && state.route !== 'register' && state.route !== 'login') {
+  const queryParams = {};
+  if (queryStr) {
+    queryStr.split('&').forEach((pair) => {
+      const [k, v] = pair.split('=');
+      queryParams[k] = decodeURIComponent(v || '');
+    });
+  }
+
+  const publicRoutes = ['terms', 'privacy', 'register', 'login', 'forgot-password', 'reset-password'];
+  if (!state.token && !publicRoutes.includes(state.route)) {
     authView('login');
     return;
   }
@@ -2338,6 +2545,8 @@ async function render() {
       if (state.route === 'terms') await termsView();
       else if (state.route === 'privacy') await privacyView();
       else if (state.route === 'register') authView('register');
+      else if (state.route === 'forgot-password') await forgotPasswordView();
+      else if (state.route === 'reset-password') await resetPasswordView(queryParams.token);
       else authView('login');
       return;
     }
@@ -2351,6 +2560,8 @@ async function render() {
     else if (state.route === 'new-application') await newApplicationView();
     else if (state.route === 'settings') await settingsView();
     else if (state.route === 'xray') await xrayView();
+    else if (state.route === 'forgot-password') await forgotPasswordView();
+    else if (state.route === 'reset-password') await resetPasswordView(queryParams.token);
     else if (state.route.startsWith('application:')) await applicationDetailView(state.route.split(':')[1]);
     else {
       state.route = 'dashboard';
