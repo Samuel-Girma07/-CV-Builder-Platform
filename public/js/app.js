@@ -481,9 +481,19 @@ function authView(mode = 'login') {
     </main>`;
 
   document.querySelector('#switchAuth').addEventListener('click', () => navigate(isRegister ? 'login' : 'register'));
+
   document.querySelector('#authForm').addEventListener('submit', async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
+    
+    if (isRegister) {
+      const checkbox = form.querySelector('#termsAgree');
+      if (!checkbox || !checkbox.checked) {
+        showToast('You must agree to the Terms & Conditions and Privacy Policy to register.', 'error');
+        return;
+      }
+    }
+
     const body = Object.fromEntries(new FormData(form).entries());
     const restore = setBtnLoading(form.querySelector('button[type="submit"]'), isRegister ? 'Creating…' : 'Signing in…');
     try {
@@ -1877,9 +1887,10 @@ async function settingsView() {
 
   document.querySelector('#detailsForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const form = e.currentTarget;
     const restore = setBtnLoading(e.submitter, 'Updating…');
     try {
-      const data = await api.put('/api/auth/details', Object.fromEntries(new FormData(e.currentTarget)));
+      const data = await api.put('/api/auth/details', Object.fromEntries(new FormData(form)));
       setAuth(data.token, data.user);
       showToast('Details updated successfully.');
       await settingsView();
@@ -1896,11 +1907,12 @@ async function settingsView() {
 
   document.querySelector('#passwordForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const form = e.currentTarget;
     const restore = setBtnLoading(e.submitter, 'Changing…');
     try {
-      await api.put('/api/auth/password', Object.fromEntries(new FormData(e.currentTarget)));
+      await api.put('/api/auth/password', Object.fromEntries(new FormData(form)));
       showToast('Password changed successfully.');
-      e.currentTarget.reset();
+      form.reset();
     } catch (err) {
       if (err.message === 'Request cancelled by user.') {
         showToast('Cancelled.', 'info');
@@ -1914,9 +1926,10 @@ async function settingsView() {
 
   document.querySelector('#prefsForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const form = e.currentTarget;
     const restore = setBtnLoading(e.submitter, 'Saving…');
     try {
-      const template = new FormData(e.currentTarget).get('defaultTemplate');
+      const template = new FormData(form).get('defaultTemplate');
       const prefs = profile.preferences || {};
       prefs.defaultTemplate = template;
       const data = await api.put('/api/profile', { ...profile, preferences: prefs });
