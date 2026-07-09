@@ -1842,16 +1842,17 @@ async function settingsView() {
         </form>
       </section>
       
-      <section class="panel">
+       <section class="panel">
         <div class="panel-head"><h2>Security</h2></div>
         <form class="form" id="passwordForm">
+          <input type="text" name="email" value="${escapeHtml(state.user.email)}" autocomplete="username" style="display: none;" readonly>
           <div class="field">
             <label for="currentPassword">Current Password</label>
-            <input id="currentPassword" name="currentPassword" type="password" required>
+            <input id="currentPassword" name="currentPassword" type="password" autocomplete="current-password" required>
           </div>
           <div class="field">
             <label for="newPassword">New Password</label>
-            <input id="newPassword" name="newPassword" type="password" required>
+            <input id="newPassword" name="newPassword" type="password" autocomplete="new-password" required>
           </div>
           <button class="btn primary" type="submit">Change Password</button>
         </form>
