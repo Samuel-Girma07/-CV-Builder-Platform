@@ -7,6 +7,7 @@ const cors = require('cors');
 const { logger, requestLogger } = require('./middlewares/logger');
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
 const requiredEnv = ['DATABASE_URL', 'JWT_SECRET', 'NVIDIA_API_KEY'];
