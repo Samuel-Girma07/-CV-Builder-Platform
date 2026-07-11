@@ -11,12 +11,15 @@ if (isSmtpConfigured) {
   // Robust secure check: auto-true for port 465, otherwise safely parse the environment variable
   const isSecure = port === 465 || (process.env.SMTP_SECURE && process.env.SMTP_SECURE.toLowerCase().trim() === 'true');
 
+  logger.info(`[SMTP CONFIG] Host: ${process.env.SMTP_HOST}, Port: ${port}, Secure: ${isSecure}, User: ${process.env.SMTP_USER}`);
+
   transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: port,
     secure: isSecure,
     connectionTimeout: 10000, // 10 seconds timeout to prevent hanging
     greetingTimeout: 10000,   // 10 seconds timeout for SMTP greeting
+    socketTimeout: 10000,     // 10 seconds timeout for inactive sockets
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
@@ -54,7 +57,16 @@ async function sendResetEmail(toEmail, tempPassword) {
   if (transporter) {
     try {
       logger.info(`Attempting to send password reset email to: ${toEmail}...`);
-      const info = await transporter.sendMail(mailOptions);
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("SMTP operation timed out after 10 seconds (Promise.race)")), 10000)
+      );
+
+      const info = await Promise.race([
+        transporter.sendMail(mailOptions),
+        timeoutPromise
+      ]);
+
       logger.info(`Password reset email sent successfully to: ${toEmail}`);
       console.log("Email sent successfully. Message ID:", info.messageId);
       return true;
