@@ -5,3 +5,7 @@ logs/
 .DS_Store
 *.jpeg
 *.png
+!public/favicons/*.png
+!public/favicons/*.jpeg
+!public/images/*.png
+!public/images/*.jpeg
