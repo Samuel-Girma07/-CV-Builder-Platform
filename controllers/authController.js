@@ -221,17 +221,19 @@ const authController = {
 
       const tempPassword = crypto.randomBytes(4).toString('hex'); // 8 characters
       const passwordHash = await bcrypt.hash(tempPassword, SALT_ROUNDS);
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
       await userQuery.setTemporaryPassword(user.id, passwordHash, expiresAt);
 
-      const emailSent = await sendResetEmail(user.email, tempPassword);
+      try {
+        await sendResetEmail(user.email, tempPassword);
+      } catch (emailErr) {
+        return res.status(502).json({ error: 'Password was reset but the email could not be delivered. Please try again or contact support.' });
+      }
 
-      const response = {
+      return res.json({
         message: 'A temporary password has been sent to your email address.',
-      };
-
-      return res.json(response);
+      });
     } catch (err) {
       return next(err);
     }

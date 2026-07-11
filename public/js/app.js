@@ -644,21 +644,8 @@ async function forgotPasswordView() {
     try {
       const res = await api.post('/api/auth/forgot-password', { email: emailInput });
       showToast(res.message, 'info');
-      
-      if (res.devTempPassword) {
-        devLinkContainer.style.display = 'block';
-        const linkInput = document.querySelector('#devLinkInput');
-        linkInput.value = res.devTempPassword;
-
-        const copyBtn = document.querySelector('#devLinkCopy');
-        copyBtn.onclick = () => {
-          navigator.clipboard.writeText(res.devTempPassword);
-          showToast('Temporary password copied to clipboard!');
-        };
-      } else {
-        navigate('login');
-        await render();
-      }
+      navigate('login');
+      await render();
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -796,17 +783,6 @@ async function updatePasswordView() {
       const meRes = await api.get('/api/auth/me');
       setAuth(state.token, meRes.user);
       showToast('New temporary password sent.');
-      
-      if (res.devTempPassword && devLinkContainer) {
-        devLinkContainer.style.display = 'block';
-        const linkInput = document.getElementById('resendDevLinkInput');
-        linkInput.value = res.devTempPassword;
-        
-        document.getElementById('resendDevLinkCopy').onclick = () => {
-          navigator.clipboard.writeText(res.devTempPassword);
-          showToast('Temporary password copied to clipboard!', 'success');
-        };
-      }
 
       if (timerInterval) clearInterval(timerInterval);
       
