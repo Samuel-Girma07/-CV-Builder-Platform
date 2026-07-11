@@ -211,7 +211,12 @@ const profileController = {
         response_format: { type: 'json_object' },
       });
 
-      const parsedData = JSON.parse(response.choices[0].message.content);
+      let parsedData;
+      try {
+        parsedData = JSON.parse(response.choices[0].message.content);
+      } catch (parseErr) {
+        return res.status(502).json({ error: 'AI failed to extract structured data from the PDF. Please ensure the PDF is a valid text-based CV.' });
+      }
       const saved = await profileQuery.upsert(req.user.id, normalizeProfile(parsedData));
 
       return res.json({ profile: saved.parsed_json_data });

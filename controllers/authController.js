@@ -15,6 +15,7 @@ function publicUser(user) {
     fullName: user.full_name,
     createdAt: user.created_at,
     mustChangePassword: user.must_change_password || false,
+    resetTokenExpires: user.reset_token_expires || null,
   };
 }
 
@@ -179,6 +180,10 @@ const authController = {
       const user = await userQuery.findByEmail(req.user.email);
       if (!user) return res.status(404).json({ error: 'User not found.' });
 
+      if (user.must_change_password && user.reset_token_expires && new Date() > new Date(user.reset_token_expires)) {
+        return res.status(401).json({ error: 'Temporary password has expired. Please request a new one.' });
+      }
+
       const passwordsMatch = await bcrypt.compare(currentPassword, user.password_hash);
       if (!passwordsMatch) {
         return res.status(401).json({ error: 'Incorrect current password.' });
@@ -216,7 +221,7 @@ const authController = {
 
       const tempPassword = crypto.randomBytes(4).toString('hex'); // 8 characters
       const passwordHash = await bcrypt.hash(tempPassword, SALT_ROUNDS);
-      const expiresAt = new Date(Date.now() + 3600000); // 1 hour
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
       await userQuery.setTemporaryPassword(user.id, passwordHash, expiresAt);
 
@@ -225,11 +230,6 @@ const authController = {
       const response = {
         message: 'A temporary password has been sent to your email address.',
       };
-
-      // In local dev/demo environment without SMTP configured, return the temporary password directly
-      if (!emailSent) {
-        response.devTempPassword = tempPassword;
-      }
 
       return res.json(response);
     } catch (err) {

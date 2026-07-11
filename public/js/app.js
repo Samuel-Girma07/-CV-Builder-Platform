@@ -668,6 +668,23 @@ async function forgotPasswordView() {
 }
 
 async function updatePasswordView() {
+  let timerInterval;
+
+  try {
+    if (state.token) {
+      const meRes = await api.get('/api/auth/me');
+      setAuth(state.token, meRes.user);
+      
+      // If the backend says they don't actually need to change their password, bounce them out!
+      if (!meRes.user.mustChangePassword) {
+        navigate('dashboard');
+        return render();
+      }
+    }
+  } catch (err) {
+    // silently fail, fallback to existing state.user
+  }
+
   app.innerHTML = `
     <main class="auth-shell">
       <section class="auth-main" style="width: 100%; justify-content: center; grid-column: 1 / -1;">
@@ -679,6 +696,9 @@ async function updatePasswordView() {
             </div>
             <h2>Update Password</h2>
             <p>You are logging in with a temporary password. You must create a new secure password to proceed.</p>
+            <div id="pwTimerContainer" style="display: none; margin-bottom: 15px; padding: 10px; border-radius: 6px; text-align: center; background: var(--surface-2); border: 1px solid var(--line);">
+              <span id="pwTimerText" style="font-weight: 600; color: var(--accent);">--:--</span>
+            </div>
             <form class="form" id="forcePwForm" novalidate>
               <div class="field auth-field">
                 <label for="currentPassword">Temporary Password</label>
@@ -701,8 +721,26 @@ async function updatePasswordView() {
                   <button type="button" class="pw-toggle" aria-label="Show password">${icons.eyeOff}</button>
                 </div>
               </div>
-              <button class="btn primary" type="submit" style="width: 100%; margin-top: 10px;">Save New Password</button>
+              <button class="btn primary" type="submit" id="submitPwBtn" style="width: 100%; margin-top: 10px;">Save New Password</button>
             </form>
+            <div style="margin-top: 15px; text-align: center;">
+              <button id="resendTempPwBtn" class="btn ghost" disabled style="width: 100%;">Resend Temporary Password</button>
+            </div>
+            <div id="resendDevLinkContainer" style="display: none; margin-top: 20px; padding: 15px; border-radius: 8px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); font-size: 13px; text-align: left;">
+              <div style="font-weight: 600; color: var(--accent); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #3b82f6; animation: pulse 2s infinite;"></span>
+                New Local Demo Mode Password:
+              </div>
+              <div style="color: var(--muted); margin-bottom: 8px; font-size: 12px; line-height: 1.4;">
+                SMTP is not configured. Here is the new temporary password:
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <input id="resendDevLinkInput" readonly style="flex: 1; font-size: 12px; padding: 6px 10px; background: var(--surface-3); border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text);" />
+                <button id="resendDevLinkCopy" class="btn" style="padding: 6px 10px; font-size: 12px; height: auto; display: flex; align-items: center; justify-content: center; gap: 4px; border-radius: 6px;">
+                  Copy
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -710,6 +748,78 @@ async function updatePasswordView() {
   `;
 
   wirePwToggles();
+
+  const timerText = document.getElementById('pwTimerText');
+  const timerContainer = document.getElementById('pwTimerContainer');
+  const resendBtn = document.getElementById('resendTempPwBtn');
+  const formFields = document.querySelectorAll('#forcePwForm input');
+  const submitBtn = document.getElementById('submitPwBtn');
+
+  function updateTimer() {
+    if (!state.user.resetTokenExpires) return;
+    timerContainer.style.display = 'block';
+
+    const expiresAt = new Date(state.user.resetTokenExpires).getTime();
+    const now = Date.now();
+    const remaining = Math.max(0, expiresAt - now);
+
+    if (remaining <= 0) {
+      if (timerInterval) clearInterval(timerInterval);
+      timerText.textContent = 'Expired';
+      timerText.style.color = 'var(--error)';
+      resendBtn.disabled = false;
+      formFields.forEach(f => f.disabled = true);
+      submitBtn.disabled = true;
+    } else {
+      const minutes = Math.floor(remaining / 60000);
+      const seconds = Math.floor((remaining % 60000) / 1000);
+      timerText.textContent = `Expires in: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      timerText.style.color = 'var(--accent)';
+      resendBtn.disabled = true;
+      formFields.forEach(f => f.disabled = false);
+      submitBtn.disabled = false;
+    }
+  }
+
+  if (state.user.resetTokenExpires) {
+    updateTimer();
+    timerInterval = setInterval(updateTimer, 1000);
+  }
+
+  resendBtn.addEventListener('click', async () => {
+    const restore = setBtnLoading(resendBtn, 'Resending…');
+    const devLinkContainer = document.getElementById('resendDevLinkContainer');
+    if (devLinkContainer) devLinkContainer.style.display = 'none';
+
+    try {
+      const res = await api.post('/api/auth/forgot-password', { email: state.user.email });
+      const meRes = await api.get('/api/auth/me');
+      setAuth(state.token, meRes.user);
+      showToast('New temporary password sent.');
+      
+      if (res.devTempPassword && devLinkContainer) {
+        devLinkContainer.style.display = 'block';
+        const linkInput = document.getElementById('resendDevLinkInput');
+        linkInput.value = res.devTempPassword;
+        
+        document.getElementById('resendDevLinkCopy').onclick = () => {
+          navigator.clipboard.writeText(res.devTempPassword);
+          showToast('Temporary password copied to clipboard!', 'success');
+        };
+      }
+
+      if (timerInterval) clearInterval(timerInterval);
+      
+      // Update timer in place without losing the devTempPassword UI by re-rendering the whole view
+      updateTimer();
+      timerInterval = setInterval(updateTimer, 1000);
+      
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      restore();
+    }
+  });
 
   document.querySelector('#forcePwForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -726,7 +836,9 @@ async function updatePasswordView() {
     const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Saving…');
     try {
       await api.post('/api/auth/update-password', Object.fromEntries(new FormData(form)));
+      if (timerInterval) clearInterval(timerInterval);
       state.user.mustChangePassword = false;
+      localStorage.setItem('cv_user', JSON.stringify(state.user));
       showToast('Password changed successfully.');
       navigate('dashboard');
       await render();
@@ -870,6 +982,36 @@ function dashboardSkeleton() {
         <div class="skel" style="height:220px;border-radius:var(--r-card)"></div>
       </div>
     </div>`);
+}
+
+function profileSkeleton() {
+  shell(`
+    <div class="page-title">
+      <div class="skel" style="width: 150px; height: 32px; border-radius: 4px;"></div>
+    </div>
+    <div class="panel">
+      <div class="grid two">
+        <div class="skel tile"></div><div class="skel tile"></div>
+        <div class="skel tile"></div><div class="skel tile"></div>
+      </div>
+      <div class="skel hero" style="margin-top: 20px;"></div>
+    </div>
+  `);
+}
+
+function applicationDetailSkeleton() {
+  shell(`
+    <div class="page-title" style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;">
+      <div>
+        <div class="skel" style="width: 250px; height: 32px; margin-bottom: 8px;"></div>
+        <div class="skel" style="width: 150px; height: 20px;"></div>
+      </div>
+    </div>
+    <div class="detail-stack">
+      <section class="panel"><div class="skel hero"></div></section>
+      <section class="panel"><div class="skel hero"></div></section>
+    </div>
+  `);
 }
 
 const TILE_COLORS = ['amber', 'coral', 'teal', 'slate'];
@@ -1246,6 +1388,40 @@ function textareaField(name, label, value = '') {
     </div>`;
 }
 
+function renderExperienceCard(item = {}) {
+  return `
+    <div class="dynamic-card experience-card" style="border: 1px solid var(--border); padding: 15px; margin-bottom: 15px; border-radius: 8px; background: var(--surface-2); position: relative;">
+      <button type="button" class="btn ghost remove-card-btn" style="position: absolute; top: 10px; right: 10px; color: var(--error); padding: 4px; width: 32px; height: 32px; min-width: 32px; line-height: 1; border-color: transparent;" title="Remove">✕</button>
+      <div class="grid two" style="margin-bottom: 10px;">
+        <div class="field" style="margin: 0;"><label>Title</label><input type="text" class="exp-title" value="${escapeHtml(item.title || '')}" required></div>
+        <div class="field" style="margin: 0;"><label>Company</label><input type="text" class="exp-company" value="${escapeHtml(item.company || '')}" required></div>
+      </div>
+      <div class="grid two" style="margin-bottom: 10px;">
+        <div class="field" style="margin: 0;"><label>Start Date</label><input type="text" class="exp-start" value="${escapeHtml(item.startDate || '')}"></div>
+        <div class="field" style="margin: 0;"><label>End Date</label><input type="text" class="exp-end" value="${escapeHtml(item.endDate || '')}"></div>
+      </div>
+      <div class="field" style="margin: 0;">
+        <label>Description</label>
+        <textarea class="exp-desc" rows="3">${escapeHtml(item.description || '')}</textarea>
+      </div>
+    </div>`;
+}
+
+function renderEducationCard(item = {}) {
+  return `
+    <div class="dynamic-card education-card" style="border: 1px solid var(--border); padding: 15px; margin-bottom: 15px; border-radius: 8px; background: var(--surface-2); position: relative;">
+      <button type="button" class="btn ghost remove-card-btn" style="position: absolute; top: 10px; right: 10px; color: var(--error); padding: 4px; width: 32px; height: 32px; min-width: 32px; line-height: 1; border-color: transparent;" title="Remove">✕</button>
+      <div class="grid two" style="margin-bottom: 10px;">
+        <div class="field" style="margin: 0;"><label>Degree</label><input type="text" class="edu-degree" value="${escapeHtml(item.degree || '')}" required></div>
+        <div class="field" style="margin: 0;"><label>Institution</label><input type="text" class="edu-institution" value="${escapeHtml(item.institution || '')}" required></div>
+      </div>
+      <div class="grid two" style="margin-bottom: 10px;">
+        <div class="field" style="margin: 0;"><label>Start Year</label><input type="text" class="edu-start" value="${escapeHtml(item.startYear || '')}"></div>
+        <div class="field" style="margin: 0;"><label>End Year</label><input type="text" class="edu-end" value="${escapeHtml(item.endYear || '')}"></div>
+      </div>
+    </div>`;
+}
+
 function profileForm(profile = {}) {
   const personal = profile.personalInfo || {};
   const prefs = profile.careerPreferences || {};
@@ -1262,14 +1438,24 @@ function profileForm(profile = {}) {
       ${textareaField('industries', 'Industries (one per line)', arrayToLines(prefs.industries))}
       ${textareaField('summary', 'Professional summary', personal.summary)}
       ${textareaField('skills', 'Skills (one per line)', arrayToLines(profile.skills))}
-      <div class="field">
-        <label for="experience">Experience — title | company | start | end | description</label>
-        <div class="lint-wrapper">
-          <div class="lint-overlay" id="experienceLintOverlay" aria-hidden="true"></div>
-          <textarea id="experience" name="experience">${escapeHtml(objectsToLines(profile.experience, ['title', 'company', 'startDate', 'endDate', 'description']))}</textarea>
-        </div>
+      
+      <div id="skillLevelsContainer" style="display: none; margin-bottom: 15px; padding: 15px; background: var(--surface-2); border-radius: 8px; border: 1px solid var(--border);">
+        <label style="display: block; margin-bottom: 10px; font-weight: 500;">Skill Proficiency Levels</label>
+        <div id="skillLevelsList" class="grid two" style="margin-top: 10px;"></div>
       </div>
-      ${textareaField('education', 'Education — degree | institution | start year | end year', objectsToLines(profile.education, ['degree', 'institution', 'startYear', 'endYear']))}
+      
+      <div class="field">
+        <label>Experience</label>
+        <div id="experienceList"></div>
+        <button type="button" class="btn ghost" id="addExperienceBtn" style="margin-top: 10px; justify-self: start;">${icons.plus} Add Experience</button>
+      </div>
+
+      <div class="field">
+        <label>Education</label>
+        <div id="educationList"></div>
+        <button type="button" class="btn ghost" id="addEducationBtn" style="margin-top: 10px; justify-self: start;">${icons.plus} Add Education</button>
+      </div>
+
       ${textareaField('projects', 'Projects — title | type | tools | outcome | link', objectsToLines(profile.projects, ['title', 'type', 'tools', 'outcome', 'link']))}
       ${textareaField('certifications', 'Certifications — name | issuer | year', objectsToLines(profile.certifications, ['name', 'issuer', 'year']))}
       <div class="actions">
@@ -1281,6 +1467,27 @@ function profileForm(profile = {}) {
 
 function readProfileForm(form) {
   const data = Object.fromEntries(new FormData(form).entries());
+  const experience = [];
+  form.querySelectorAll('.experience-card').forEach(card => {
+    experience.push({
+      title: card.querySelector('.exp-title').value.trim(),
+      company: card.querySelector('.exp-company').value.trim(),
+      startDate: card.querySelector('.exp-start').value.trim(),
+      endDate: card.querySelector('.exp-end').value.trim(),
+      description: card.querySelector('.exp-desc').value.trim()
+    });
+  });
+
+  const education = [];
+  form.querySelectorAll('.education-card').forEach(card => {
+    education.push({
+      degree: card.querySelector('.edu-degree').value.trim(),
+      institution: card.querySelector('.edu-institution').value.trim(),
+      startYear: card.querySelector('.edu-start').value.trim(),
+      endYear: card.querySelector('.edu-end').value.trim()
+    });
+  });
+
   return {
     personalInfo: {
       fullName: data.fullName.trim(),
@@ -1296,8 +1503,8 @@ function readProfileForm(form) {
       cvTone: 'Formal',
     },
     skills: linesToArray(data.skills),
-    experience: linesToObjects(data.experience, ['title', 'company', 'startDate', 'endDate', 'description']),
-    education: linesToObjects(data.education, ['degree', 'institution', 'startYear', 'endYear']),
+    experience,
+    education,
     projects: linesToObjects(data.projects, ['title', 'type', 'tools', 'outcome', 'link']),
     certifications: linesToObjects(data.certifications, ['name', 'issuer', 'year']),
     skillLevels: (state.profile && state.profile.skillLevels) || {},
@@ -1305,6 +1512,7 @@ function readProfileForm(form) {
 }
 
 async function profileView() {
+  profileSkeleton();
   const profile = await loadProfile();
   const skills = profile.skills || [];
   shell(`
@@ -1333,12 +1541,92 @@ async function profileView() {
       </section>
     </div>`);
 
+  // Wire dynamic form lists
+  const expList = document.getElementById('experienceList');
+  const addExpBtn = document.getElementById('addExperienceBtn');
+  if (profile.experience && profile.experience.length > 0) {
+    profile.experience.forEach(item => expList.insertAdjacentHTML('beforeend', renderExperienceCard(item)));
+  }
+  addExpBtn.addEventListener('click', () => {
+    expList.insertAdjacentHTML('beforeend', renderExperienceCard());
+  });
+
+  const eduList = document.getElementById('educationList');
+  const addEduBtn = document.getElementById('addEducationBtn');
+  if (profile.education && profile.education.length > 0) {
+    profile.education.forEach(item => eduList.insertAdjacentHTML('beforeend', renderEducationCard(item)));
+  }
+  addEduBtn.addEventListener('click', () => {
+    eduList.insertAdjacentHTML('beforeend', renderEducationCard());
+  });
+
+  // Delegate remove card events
+  document.getElementById('profileForm').addEventListener('click', (e) => {
+    if (e.target.closest('.remove-card-btn')) {
+      e.target.closest('.dynamic-card').remove();
+    }
+  });
+
+  // Skill levels UI
+  const updateSkillLevelsUI = () => {
+    const skillsText = document.getElementById('skills').value;
+    const currentSkills = linesToArray(skillsText);
+    const container = document.getElementById('skillLevelsContainer');
+    const list = document.getElementById('skillLevelsList');
+    
+    if (currentSkills.length === 0) {
+      container.style.display = 'none';
+      return;
+    }
+    
+    container.style.display = 'block';
+    const existingSelects = Array.from(list.querySelectorAll('select')).reduce((acc, sel) => {
+      acc[sel.dataset.skill] = sel.value;
+      return acc;
+    }, state.profile && state.profile.skillLevels ? state.profile.skillLevels : {});
+    
+    list.innerHTML = currentSkills.map(skill => `
+      <div class="field" style="margin: 0;">
+        <label style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">${escapeHtml(skill)}</label>
+        <select class="skill-level-select" data-skill="${escapeHtml(skill)}" style="padding: 6px; font-size: 13px;">
+          <option value="Beginner" ${existingSelects[skill] === 'Beginner' ? 'selected' : ''}>Beginner</option>
+          <option value="Intermediate" ${existingSelects[skill] === 'Intermediate' || !existingSelects[skill] ? 'selected' : ''}>Intermediate</option>
+          <option value="Advanced" ${existingSelects[skill] === 'Advanced' ? 'selected' : ''}>Advanced</option>
+          <option value="Expert" ${existingSelects[skill] === 'Expert' ? 'selected' : ''}>Expert</option>
+        </select>
+      </div>
+    `).join('');
+  };
+
+  const skillsInput = document.getElementById('skills');
+  let debounceTimer;
+  skillsInput.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(updateSkillLevelsUI, 400);
+  });
+  updateSkillLevelsUI(); // Initial render
+
   document.querySelector('#profileForm').addEventListener('submit', async (event) => {
     event.preventDefault();
     const restore = setBtnLoading(event.currentTarget.querySelector('button[type="submit"]'), 'Saving…');
     try {
+      // Collect skill levels
+      const levels = {};
+      document.querySelectorAll('.skill-level-select').forEach(sel => {
+        levels[sel.dataset.skill] = sel.value;
+      });
+
       const data = await api.put('/api/profile', readProfileForm(event.currentTarget));
+      
+      // Save skill levels if any exist
+      if (Object.keys(levels).length > 0) {
+        await api.put('/api/profile/skill-levels', { levels });
+      }
+
       state.profile = data.profile;
+      // update state profile skill levels to reflect the locally saved ones since the first PUT doesn't return them properly
+      state.profile.skillLevels = levels;
+
       showToast('Profile saved.');
       navigate('dashboard');
     } catch (err) {
@@ -1605,6 +1893,7 @@ async function newApplicationView() {
 }
 
 async function applicationDetailView(id) {
+  applicationDetailSkeleton();
   const [data, interviewsData] = await Promise.all([
     api.get(`/api/applications/${id}`),
     api.get(`/api/applications/${id}/interviews`).catch(() => ({ interviews: [] }))
@@ -1656,7 +1945,9 @@ async function applicationDetailView(id) {
           </div>
         </form>
         ${application.generated_cover_letter
-          ? `<hr>${clampBlock(escapeHtml(application.generated_cover_letter), 10, 'letter')}`
+          ? `<hr>
+             <textarea id="coverLetterText" style="width: 100%; min-height: 300px; padding: 15px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); margin-bottom: 10px; font-family: inherit; line-height: 1.6; resize: vertical;">${escapeHtml(application.generated_cover_letter)}</textarea>
+             <button class="btn primary block" id="saveCoverLetterBtn">Save Edits</button>`
           : emptyState({ icon: 'doc', title: 'No cover letter yet', message: 'Pick a tone and generate a cover letter tailored to this role.' })}
       </section>
 
@@ -1674,19 +1965,20 @@ async function applicationDetailView(id) {
             </button>
           </div>
         </form>
-        ${application.tailored_cv_profile
-          ? `<hr><div class="success-banner" style="background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); border-radius: 8px; padding: 16px; margin-top: 16px; display: flex; align-items: center; gap: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
-              <div style="color: var(--success); display:flex; align-items:center; justify-content:center; width: 40px; height: 40px; border-radius: 50%; background: rgba(34,197,94,0.2);">
-                ${icons.check}
-              </div>
-              <div style="flex: 1;">
-                <strong style="display:block; color:var(--success); font-size: 15px; margin-bottom: 4px;">CV Optimized Successfully</strong>
-                <span style="color: var(--muted); font-size: 13px;">Your bullet points have been tailored for this role.</span>
-              </div>
-              <button class="btn" type="button" id="downloadTailoredCv" style="background: var(--success); color: #fff; border: none; padding: 8px 16px; box-shadow: 0 4px 12px rgba(34,197,94,0.3); white-space: nowrap; border-radius: 6px; font-weight: 500;">
-                ${icons.download} Download PDF
-              </button>
-             </div>`
+        ${application.tailored_cv_profile && application.tailored_cv_profile.experience
+          ? `<hr>
+             <h3 style="margin-top: 15px; font-size: 14px; color: var(--accent);">Review Tailored Bullet Points</h3>
+             <div class="tailored-preview" style="background: var(--surface-2); padding: 15px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 15px; max-height: 400px; overflow-y: auto;">
+               ${application.tailored_cv_profile.experience.map(exp => `
+                 <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--border);">
+                   <strong>${escapeHtml(exp.title)} at ${escapeHtml(exp.company)}</strong>
+                   <div style="color: var(--muted); margin-top: 8px; white-space: pre-wrap; font-size: 13px; line-height: 1.5;">${escapeHtml(exp.description)}</div>
+                 </div>
+               `).join('')}
+             </div>
+             <button class="btn" type="button" id="downloadTailoredCv" style="background: var(--success); color: #fff; border: none; padding: 8px 16px; box-shadow: 0 4px 12px rgba(34,197,94,0.3); border-radius: 6px; font-weight: 500;">
+               ${icons.download} Download PDF
+             </button>`
           : ''}
       </section>
 
@@ -1836,7 +2128,8 @@ async function applicationDetailView(id) {
   const copyButton = document.querySelector('#copyLetter');
   if (copyButton) {
     copyButton.addEventListener('click', async () => {
-      const text = application.generated_cover_letter || '';
+      const taElem = document.querySelector('#coverLetterText');
+      const text = taElem ? taElem.value : (application.generated_cover_letter || '');
       try {
         await navigator.clipboard.writeText(text);
       } catch (err) {
@@ -1855,6 +2148,23 @@ async function applicationDetailView(id) {
       copyButton.disabled = true;
       setTimeout(() => { copyButton.innerHTML = original; copyButton.disabled = false; }, 1600);
       showToast('Cover letter copied to clipboard.');
+    });
+  }
+
+  const saveCoverLetterBtn = document.querySelector('#saveCoverLetterBtn');
+  if (saveCoverLetterBtn) {
+    saveCoverLetterBtn.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const restore = setBtnLoading(btn, 'Saving...');
+      const updatedText = document.querySelector('#coverLetterText').value;
+      try {
+        await api.patch(`/api/applications/${id}`, { generated_cover_letter: updatedText });
+        showToast('Cover letter updated successfully.');
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        restore();
+      }
     });
   }
 

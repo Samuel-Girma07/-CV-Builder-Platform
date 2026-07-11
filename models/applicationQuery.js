@@ -3,7 +3,7 @@ const pool = require('../config/db');
 /* Strict allowlists — never interpolate raw user input into SQL */
 const SORTABLE_COLUMNS = ['job_title', 'company', 'ats_match_score', 'created_at', 'status'];
 const FILTERABLE_COLUMNS = ['job_title', 'company', 'status'];
-const UPDATABLE_FIELDS = ['job_title', 'company', 'job_description', 'status', 'custom_fields'];
+const UPDATABLE_FIELDS = ['job_title', 'company', 'job_description', 'status', 'custom_fields', 'generated_cover_letter'];
 
 const applicationQuery = {
   /**
@@ -238,8 +238,12 @@ const applicationQuery = {
       );
       
       if (result.rows.length > 0) {
-        const historyValues = result.rows.map(r => `(${r.id}, '${status}')`).join(', ');
-        await client.query(`INSERT INTO application_status_history (application_id, status) VALUES ${historyValues}`);
+        const historyParams = [];
+        const historyValues = result.rows.map((r, i) => {
+          historyParams.push(r.id, status);
+          return `($${i * 2 + 1}, $${i * 2 + 2})`;
+        }).join(', ');
+        await client.query(`INSERT INTO application_status_history (application_id, status) VALUES ${historyValues}`, historyParams);
       }
       
       await client.query('COMMIT');

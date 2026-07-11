@@ -31,7 +31,7 @@ const userQuery = {
    */
   async findById(id) {
     const result = await pool.query(
-      `SELECT id, email, full_name, created_at, must_change_password
+      `SELECT id, email, full_name, created_at, must_change_password, reset_token_expires
        FROM users WHERE id = $1`,
       [id]
     );

@@ -221,17 +221,19 @@ function attachGridEvents() {
   });
 
   // Filters
-  document.querySelectorAll('input[data-filter]').forEach(inp => {
+  document.querySelectorAll('input[data-filter], select[data-filter]').forEach(inp => {
     inp.addEventListener('change', (e) => {
       gridState.filters[inp.dataset.filter] = e.target.value.trim();
       renderDataGrid();
     });
-    inp.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        gridState.filters[inp.dataset.filter] = e.target.value.trim();
-        renderDataGrid();
-      }
-    });
+    if (inp.tagName === 'INPUT') {
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          gridState.filters[inp.dataset.filter] = e.target.value.trim();
+          renderDataGrid();
+        }
+      });
+    }
   });
 
   // Select All
