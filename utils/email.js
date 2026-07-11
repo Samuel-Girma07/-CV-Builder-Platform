@@ -6,10 +6,17 @@ let transporter = null;
 const isSmtpConfigured = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
 
 if (isSmtpConfigured) {
+  const port = parseInt(process.env.SMTP_PORT || '587', 10);
+  
+  // Robust secure check: auto-true for port 465, otherwise safely parse the environment variable
+  const isSecure = port === 465 || (process.env.SMTP_SECURE && process.env.SMTP_SECURE.toLowerCase().trim() === 'true');
+
   transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || '587', 10),
-    secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+    port: port,
+    secure: isSecure,
+    connectionTimeout: 10000, // 10 seconds timeout to prevent hanging
+    greetingTimeout: 10000,   // 10 seconds timeout for SMTP greeting
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
@@ -46,6 +53,7 @@ async function sendResetEmail(toEmail, tempPassword) {
 
   if (transporter) {
     try {
+      logger.info(`Attempting to send password reset email to: ${toEmail}...`);
       const info = await transporter.sendMail(mailOptions);
       logger.info(`Password reset email sent successfully to: ${toEmail}`);
       console.log("Email sent successfully. Message ID:", info.messageId);
