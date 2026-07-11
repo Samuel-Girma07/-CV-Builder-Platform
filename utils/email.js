@@ -53,7 +53,8 @@ async function sendResetEmail(toEmail, tempPassword) {
     } catch (error) {
       console.error("NODEMAILER ERROR:", error);
       logger.error(`Error sending email via SMTP: ${error.message}`);
-      // Fallback to console logging
+      // Throw error if SMTP is configured but fails, to avoid silently pretending it succeeded
+      throw new Error(`Email delivery failed: ${error.message}`);
     }
   }
 
