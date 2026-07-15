@@ -1427,12 +1427,14 @@ button.row:hover {
   z-index: 30;
   width: 56px;
   height: 56px;
-  display: grid;
-  place-items: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   border: 0;
   background: transparent;
   cursor: pointer;
   outline: none;
+  transform-origin: center;
   transition: transform 0.3s ease;
 }
 
@@ -1441,20 +1443,8 @@ button.row:hover {
 }
 
 .fab-svg {
-  stroke: var(--faint);
+  stroke: var(--accent);
   fill: none;
-  transition: all 0.3s ease;
-}
-
-.fab:hover .fab-svg {
-  fill: var(--accent);
-  stroke: var(--accent-ink);
-}
-
-.fab:active .fab-svg {
-  fill: var(--accent-press);
-  stroke: var(--accent-ink);
-  transition: none;
 }
 
 
@@ -2761,15 +2751,14 @@ input[type="checkbox"] {
   min-width: 6.4em;
   justify-content: center;
 }
-.txt-1,
-.txt-2 {
-  position: absolute;
-  white-space: nowrap;
-}
 .txt-1 {
+  position: relative;
+  white-space: nowrap;
   animation: appear-anim 1s ease-in-out forwards;
 }
 .txt-2 {
+  position: absolute;
+  white-space: nowrap;
   opacity: 0;
 }
 @keyframes appear-anim {
