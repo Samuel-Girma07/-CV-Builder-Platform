@@ -521,9 +521,9 @@ hr {
   height: calc(100vh - 28px);
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
-  padding: 18px 10px;
+  padding: 18px 12px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-card);
@@ -538,6 +538,7 @@ hr {
   background: var(--accent);
   color: var(--accent-ink);
   margin-bottom: 14px;
+  margin-left: 6px;
   flex: 0 0 auto;
 }
 
@@ -546,7 +547,7 @@ hr {
   flex-direction: column;
   gap: 6px;
   width: 100%;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .rail-btn {
@@ -561,6 +562,7 @@ hr {
   color: var(--muted);
   background: transparent;
   transition: background 0.15s ease, color 0.15s ease;
+  transform-origin: left center !important;
 }
 
 .rail-btn .ico {
@@ -590,6 +592,7 @@ hr {
 
 .rail-btn.signout {
   color: var(--danger);
+  margin-top: auto;
 }
 
 .rail-btn.signout:hover {

@@ -890,6 +890,59 @@ function shell(content, { search = false } = {}) {
     authView();
   });
   document.querySelector('#fab').addEventListener('click', () => navigate('new-application'));
+
+  wireSideMenuAnimation();
+}
+
+function wireSideMenuAnimation() {
+  const panel = document.querySelector('.rail');
+  const items = document.querySelectorAll('.rail-btn');
+  if (!panel || items.length === 0) return;
+
+  const baseItemWidth = 52;
+  const baseItemHeight = 48;
+  const maxMagnification = 72;
+  const distance = 150;
+
+  panel.addEventListener('mousemove', (e) => {
+    const mouseY = e.clientY;
+    
+    items.forEach(item => {
+      const panelRect = panel.getBoundingClientRect();
+      const relativeMouseY = mouseY - panelRect.y;
+      
+      // Calculate original center using offsetTop to avoid feedback loop
+      const itemCenterY = item.offsetTop + (baseItemHeight / 2);
+      const mouseDistance = Math.abs(relativeMouseY - itemCenterY);
+      
+      let targetWidth = baseItemWidth;
+      let targetHeight = baseItemHeight;
+      
+      if (mouseDistance < distance) {
+        const smoothScale = Math.cos((mouseDistance / distance) * (Math.PI / 2));
+        targetWidth = baseItemWidth + (maxMagnification - baseItemWidth) * smoothScale;
+        targetHeight = baseItemHeight + (maxMagnification - baseItemHeight) * smoothScale;
+      }
+      
+      item.style.width = `${targetWidth}px`;
+      item.style.height = `${targetHeight}px`;
+      
+      const ico = item.querySelector('.ico');
+      if (ico) {
+         const scale = targetWidth / baseItemWidth;
+         ico.style.transform = `scale(${scale})`;
+      }
+    });
+  });
+
+  panel.addEventListener('mouseleave', () => {
+    items.forEach(item => {
+      item.style.width = '';
+      item.style.height = '';
+      const ico = item.querySelector('.ico');
+      if (ico) ico.style.transform = '';
+    });
+  });
 }
 
 /* ----------------------------------------------------------------
