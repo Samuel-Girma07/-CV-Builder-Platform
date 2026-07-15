@@ -260,6 +260,23 @@ async function runWithLoader(title, steps, fn) {
   }
 }
 
+function generatePremiumBtn(id, text1, text2, type = 'button') {
+  const t1 = text1.split('').map((c, i) => c === ' ' ? `<span class="btn-letter" style="animation-delay: ${i * 0.08}s">&nbsp;</span>` : `<span class="btn-letter" style="animation-delay: ${i * 0.08}s">${c}</span>`).join('');
+  const t2 = text2.split('').map((c, i) => c === ' ' ? `<span class="btn-letter" style="animation-delay: ${i * 0.08}s">&nbsp;</span>` : `<span class="btn-letter" style="animation-delay: ${i * 0.08}s">${c}</span>`).join('');
+  return `
+<div class="btn-wrapper" style="width: 100%;">
+  <button class="uiverse-gen-btn" type="${type}" ${id ? `id="${id}"` : ''} style="width: 100%;">
+    <svg class="btn-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z"></path>
+    </svg>
+    <div class="txt-wrapper">
+      <div class="txt-1">${t1}</div>
+      <div class="txt-2">${t2}</div>
+    </div>
+  </button>
+</div>`;
+}
+
 function emptyState({ icon = 'empty', title, message, actionLabel, actionRoute }) {
   return `
     <div class="state">
@@ -1489,7 +1506,7 @@ function profileForm(profile = {}) {
       ${textareaField('certifications', 'Certifications — name | issuer | year', objectsToLines(profile.certifications, ['name', 'issuer', 'year']))}
       <div class="actions">
         <button class="btn primary" type="submit">Save profile</button>
-        <button class="btn" type="button" id="summaryBtn">${icons.spark} Generate summary</button>
+        ${generatePremiumBtn('summaryBtn', 'Generate summary', 'Generating summary', 'button')}
       </div>
     </form>`;
 }
@@ -1984,7 +2001,7 @@ async function applicationDetailView(id) {
                 ${['Formal', 'Confident', 'Concise'].map((tone) => `<option value="${tone}" ${application.selected_tone === tone ? 'selected' : ''}>${tone}</option>`).join('')}
               </select>
             </div>
-            <button class="btn primary" type="submit" style="margin-bottom:0;">${icons.spark} ${application.generated_cover_letter ? 'Regenerate' : 'Generate'}</button>
+            ${generatePremiumBtn('', application.generated_cover_letter ? 'Regenerate' : 'Generate', application.generated_cover_letter ? 'Regenerating' : 'Generating', 'submit')}
           </div>
         </form>
         ${application.generated_cover_letter
@@ -2003,9 +2020,7 @@ async function applicationDetailView(id) {
             <p style="flex:1; margin:0; color:var(--muted); font-size:14px; line-height:1.5;">
               Automatically rewrite and re-order your CV bullets to highlight the most relevant experience for this specific job description.
             </p>
-            <button class="btn primary" type="submit" style="margin-bottom:0;">
-              ${icons.spark} ${application.tailored_cv_profile ? 'Regenerate CV' : 'Optimize CV for this Job'}
-            </button>
+            ${generatePremiumBtn('', application.tailored_cv_profile ? 'Regenerate CV' : 'Optimize CV', application.tailored_cv_profile ? 'Regenerating' : 'Optimizing CV', 'submit')}
           </div>
         </form>
         ${application.tailored_cv_profile && application.tailored_cv_profile.experience
@@ -2034,9 +2049,7 @@ async function applicationDetailView(id) {
             <p style="flex:1; margin:0; color:var(--muted); font-size:14px; line-height:1.5;">
               Generate likely interview questions and suggested answers pulling directly from your CV experience.
             </p>
-            <button class="btn primary" type="submit" style="margin-bottom:0;">
-              ${icons.spark} ${application.interview_prep_guide ? 'Regenerate Flashcards' : 'Generate Flashcards'}
-            </button>
+            ${generatePremiumBtn('', application.interview_prep_guide ? 'Regenerate Flashcards' : 'Generate Flashcards', application.interview_prep_guide ? 'Regenerating' : 'Generating Flashcards', 'submit')}
           </div>
         </form>
         ${application.interview_prep_guide && Array.isArray(application.interview_prep_guide)
