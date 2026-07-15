@@ -1430,22 +1430,34 @@ button.row:hover {
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 18px;
-  color: var(--accent-ink);
-  background: var(--accent);
-  box-shadow: var(--shadow);
-  transition: transform 0.12s ease, background 0.15s ease;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+  transition: transform 0.3s ease;
 }
 
 .fab:hover {
-  transform: translateY(-2px);
-  background: var(--accent-press);
+  transform: rotate(90deg);
 }
 
-.fab svg {
-  width: 24px;
-  height: 24px;
+.fab-svg {
+  stroke: var(--faint);
+  fill: none;
+  transition: all 0.3s ease;
 }
+
+.fab:hover .fab-svg {
+  fill: var(--accent);
+  stroke: var(--accent-ink);
+}
+
+.fab:active .fab-svg {
+  fill: var(--accent-press);
+  stroke: var(--accent-ink);
+  transition: none;
+}
+
+
 
 /* ----------------------------------------------------------------
    Toast

@@ -896,7 +896,13 @@ function shell(content, { search = false } = {}) {
         ${content}
       </main>
     </div>
-    <button class="fab" id="fab" title="New application" aria-label="New application">${icons.plus}</button>`;
+    <button class="fab" id="fab" title="New application" aria-label="New application">
+      <svg xmlns="http://www.w3.org/2000/svg" width="56px" height="56px" viewBox="0 0 24 24" class="fab-svg">
+        <path d="M12 22C17.5 22 22 17.5 22 12C22 6.5 17.5 2 12 2C6.5 2 2 6.5 2 12C2 17.5 6.5 22 12 22Z" stroke-width="1.5"></path>
+        <path d="M8 12H16" stroke-width="1.5"></path>
+        <path d="M12 16V8" stroke-width="1.5"></path>
+      </svg>
+    </button>`;
 
   document.querySelectorAll('[data-route]').forEach((button) => {
     button.addEventListener('click', () => navigate(button.dataset.route));
