@@ -60,9 +60,14 @@ async function sendResetEmail(toEmail, resetToken) {
   }
 
   // Fallback / Development mode (no API key configured).
-  // The reset token must NEVER be logged or echoed anywhere —
-  // fail loud so operators notice delivery is not actually configured.
-  logger.warn(`Email delivery is NOT configured (RESEND_API_KEY missing). Reset email to ${toEmail} was NOT sent.`);
+  // The plaintext credential must NEVER be logged or echoed anywhere.
+  // In production this is an operator emergency, not a debug event.
+  const message = `Email delivery is NOT configured (RESEND_API_KEY missing). Reset email to ${toEmail} was NOT sent.`;
+  if (process.env.NODE_ENV === 'production') {
+    logger.error(message);
+  } else {
+    logger.warn(message);
+  }
   return false;
 }
 
@@ -110,8 +115,14 @@ async function sendTempPasswordEmail(toEmail, tempPassword) {
     }
   }
 
-  // The plaintext temporary password must NEVER be logged or echoed anywhere.
-  logger.warn(`Email delivery is NOT configured (RESEND_API_KEY missing). Temporary password email to ${toEmail} was NOT sent.`);
+  // The plaintext credential must NEVER be logged or echoed anywhere.
+  // In production this is an operator emergency, not a debug event.
+  const message = `Email delivery is NOT configured (RESEND_API_KEY missing). Recovery email to ${toEmail} was NOT sent.`;
+  if (process.env.NODE_ENV === 'production') {
+    logger.error(message);
+  } else {
+    logger.warn(message);
+  }
   return false;
 }
 

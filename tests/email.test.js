@@ -89,4 +89,32 @@ describe('sendTempPasswordEmail', () => {
 
     if (originalKey) process.env.RESEND_API_KEY = originalKey; else delete process.env.RESEND_API_KEY;
   });
+
+  test('escalates to ERROR-level logging when unconfigured in production', async () => {
+    const originalKey = process.env.RESEND_API_KEY;
+    const originalEnv = process.env.NODE_ENV;
+    delete process.env.RESEND_API_KEY;
+    process.env.NODE_ENV = 'production';
+
+    jest.resetModules();
+    const { logger } = require('../middlewares/logger');
+    const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {});
+    const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const { sendTempPasswordEmail: freshSend } = require('../utils/email');
+    const wasSent = await freshSend('prod-user@example.com', 'ProdTemp55');
+
+    expect(wasSent).toBe(false);
+    const errorMessages = errorSpy.mock.calls.map((call) => call[0]).join('\n');
+    expect(errorMessages).toContain('NOT configured');
+    expect(errorMessages).toContain('prod-user@example.com');
+    // The escalation must be ERROR, not the dev-mode WARN.
+    expect(warnSpy.mock.calls.map((c) => c[0]).join('\n')).not.toContain('NOT configured');
+
+    warnSpy.mockRestore();
+    errorSpy.mockRestore();
+
+    if (originalKey) process.env.RESEND_API_KEY = originalKey; else delete process.env.RESEND_API_KEY;
+    if (originalEnv !== undefined) process.env.NODE_ENV = originalEnv; else delete process.env.NODE_ENV;
+  });
 });

@@ -18,6 +18,14 @@ if (missingEnv.length > 0) {
   process.exit(1);
 }
 
+// Password recovery silently no-ops without an email provider. That is an
+// acceptable demo mode but must never happen unnoticed in production.
+if (process.env.NODE_ENV === 'production' && !process.env.RESEND_API_KEY) {
+  logger.error(
+    'RESEND_API_KEY is NOT configured in production: password recovery emails cannot be delivered and users will be locked out of reset flows.'
+  );
+}
+
 const pool = require('./config/db');
 async function runStartupMigration() {
   try {
