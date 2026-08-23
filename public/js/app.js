@@ -2592,10 +2592,51 @@ async function applicationDetailView(id) {
                 </div>
               `).join('')}
             </div>
-          ` : `<p class="standout-empty">No manipulative or scam-like language was detected in this posting.</p>`}
-        </section>
-      </div>
-    </div>`);
+           ` : `<p class="standout-empty">No manipulative or scam-like language was detected in this posting.</p>`}
+         </section>
+
+         <section class="standout-card">
+           <div class="standout-head">
+             <span class="standout-icon">${icons.doc}</span>
+             <div class="standout-title">
+               <h2>Log &amp; contacts</h2>
+               <p>People and touchpoints for this application</p>
+             </div>
+           </div>
+           <h3 style="font-size:13px; margin:10px 0 6px 0;">Contacts</h3>
+           <div id="contactList"></div>
+           <form id="contactForm" class="form" style="margin-top:8px;">
+             <div style="display:flex; gap:8px; flex-wrap:wrap;">
+               <input id="ctName" placeholder="Name *" required style="flex:1; min-width:120px;">
+               <input id="ctRole" placeholder="Role" style="flex:1; min-width:110px;">
+             </div>
+             <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">
+               <input id="ctEmail" type="email" placeholder="Email" style="flex:1; min-width:140px;">
+               <input id="ctPhone" placeholder="Phone" style="flex:1; min-width:110px;">
+             </div>
+             <button class="btn ghost" type="submit" style="margin-top:6px;">${icons.plus} Add contact</button>
+           </form>
+
+           <h3 style="font-size:13px; margin:16px 0 6px 0;">Activity</h3>
+           <div id="activityList"></div>
+           <form id="activityForm" class="form" style="margin-top:8px;">
+             <div style="display:flex; gap:8px; flex-wrap:wrap;">
+               <select id="actKind" style="width:auto;">
+                 <option value="note">Note</option>
+                 <option value="call">Call</option>
+                 <option value="email">Email</option>
+                 <option value="interview">Interview</option>
+                 <option value="offer">Offer</option>
+                 <option value="rejection">Rejection</option>
+               </select>
+               <input type="date" id="actDate" style="width:auto;">
+             </div>
+             <textarea id="actContent" rows="2" placeholder="What happened?" style="margin-top:6px;"></textarea>
+             <button class="btn ghost" type="submit" style="margin-top:6px;">${icons.plus} Log entry</button>
+           </form>
+         </section>
+       </div>
+     </div>`);
 
   document.querySelectorAll('[data-route]').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.route)));
 
@@ -2768,6 +2809,9 @@ async function applicationDetailView(id) {
 
   // Mock interview practice wiring
   wireMockInterview(id);
+
+  // Contacts & activity log
+  wireApplicationLog(id);
 
   // Follow-up reminders
   const reminderList = document.getElementById('reminderList');
@@ -2975,6 +3019,88 @@ function wireMockInterview(appId) {
   }
 
   startBtn.addEventListener('click', start);
+}
+
+function wireApplicationLog(appId) {
+  const contactList = document.getElementById('contactList');
+  const activityList = document.getElementById('activityList');
+  if (!contactList || !activityList) return;
+
+  const renderContacts = async () => {
+    try {
+      const { contacts } = await api.get(`/api/applications/${appId}/contacts`);
+      contactList.innerHTML = contacts.length ? contacts.map((c) => `
+        <div style="display:flex; justify-content:space-between; gap:10px; padding:5px 0; font-size:13px;">
+          <span><strong>${escapeHtml(c.name)}</strong>${c.role ? ` · ${escapeHtml(c.role)}` : ''}${c.email ? `<br><span class="muted" style="font-size:12px;">${escapeHtml(c.email)}${c.phone ? ' · ' + escapeHtml(c.phone) : ''}</span>` : ''}</span>
+          <button class="btn ghost" data-del-contact="${c.id}" style="padding:2px 8px; font-size:12px; align-self:flex-start;">✕</button>
+        </div>`).join('')
+        : '<span class="muted" style="font-size:12.5px;">No contacts yet.</span>';
+      contactList.querySelectorAll('[data-del-contact]').forEach((b) => {
+        b.addEventListener('click', async () => {
+          try {
+            await api.delete(`/api/applications/${appId}/contacts/${b.dataset.delContact}`);
+            await renderContacts();
+          } catch (err) { showToast(err.message, 'error'); }
+        });
+      });
+    } catch (err) {
+      contactList.innerHTML = `<span class="muted" style="font-size:12.5px;">${escapeHtml(err.message)}</span>`;
+    }
+  };
+
+  const KIND_LABELS = { note: 'Note', call: 'Call', email: 'Email', interview: 'Interview', offer: 'Offer', rejection: 'Rejection' };
+  const renderActivities = async () => {
+    try {
+      const { activities } = await api.get(`/api/applications/${appId}/activities`);
+      activityList.innerHTML = activities.length ? activities.map((a) => `
+        <div style="display:flex; justify-content:space-between; gap:10px; padding:5px 0; font-size:13px;">
+          <span><span class="tag">${escapeHtml(KIND_LABELS[a.kind] || a.kind)}</span> ${new Date(a.occurred_at).toLocaleDateString()}${a.content ? `<br><span class="muted" style="font-size:12px;">${escapeHtml(a.content)}</span>` : ''}</span>
+          <button class="btn ghost" data-del-activity="${a.id}" style="padding:2px 8px; font-size:12px; align-self:flex-start;">✕</button>
+        </div>`).join('')
+        : '<span class="muted" style="font-size:12.5px;">Nothing logged yet.</span>';
+      activityList.querySelectorAll('[data-del-activity]').forEach((b) => {
+        b.addEventListener('click', async () => {
+          try {
+            await api.delete(`/api/applications/${appId}/activities/${b.dataset.delActivity}`);
+            await renderActivities();
+          } catch (err) { showToast(err.message, 'error'); }
+        });
+      });
+    } catch (err) {
+      activityList.innerHTML = `<span class="muted" style="font-size:12.5px;">${escapeHtml(err.message)}</span>`;
+    }
+  };
+
+  document.getElementById('contactForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await api.post(`/api/applications/${appId}/contacts`, {
+        name: document.getElementById('ctName').value,
+        role: document.getElementById('ctRole').value,
+        email: document.getElementById('ctEmail').value,
+        phone: document.getElementById('ctPhone').value,
+      });
+      showToast('Contact added.');
+      await renderContacts();
+    } catch (err) { showToast(err.message, 'error'); }
+  });
+
+  document.getElementById('activityForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const dateVal = document.getElementById('actDate').value;
+      await api.post(`/api/applications/${appId}/activities`, {
+        kind: document.getElementById('actKind').value,
+        content: document.getElementById('actContent').value,
+        occurredAt: dateVal ? new Date(`${dateVal}T12:00:00`).toISOString() : undefined,
+      });
+      showToast('Logged.');
+      await renderActivities();
+    } catch (err) { showToast(err.message, 'error'); }
+  });
+
+  renderContacts();
+  renderActivities();
 }
 
 /* ----------------------------------------------------------------

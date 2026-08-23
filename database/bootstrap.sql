@@ -151,6 +151,28 @@ CREATE TABLE IF NOT EXISTS reminders (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS app_contacts (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  role VARCHAR(120),
+  email VARCHAR(255),
+  phone VARCHAR(60),
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS app_activities (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+  kind VARCHAR(20) NOT NULL,
+  content TEXT NOT NULL DEFAULT '',
+  occurred_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Normalize legacy free-text statuses onto the canonical set.
 UPDATE applications SET status = 'Applied'      WHERE lower(status) = 'applied';
 UPDATE applications SET status = 'Interviewing' WHERE lower(status) = 'interviewing';
@@ -201,6 +223,22 @@ CREATE INDEX IF NOT EXISTS idx_interview_messages_session ON interview_messages(
 CREATE INDEX IF NOT EXISTS idx_reminders_user_pending
   ON reminders(user_id, remind_at)
   WHERE status = 'pending';
+
+CREATE INDEX IF NOT EXISTS idx_app_contacts_app ON app_contacts(application_id);
+
+CREATE INDEX IF NOT EXISTS idx_app_activities_app
+  ON app_activities(application_id, occurred_at DESC);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'app_activities_kind_allowed'
+  ) THEN
+    ALTER TABLE app_activities
+      ADD CONSTRAINT app_activities_kind_allowed
+      CHECK (kind IN ('note', 'call', 'email', 'interview', 'offer', 'rejection'));
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_cv_versions_user ON cv_versions(user_id);
 

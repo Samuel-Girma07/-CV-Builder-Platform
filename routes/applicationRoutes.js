@@ -36,4 +36,12 @@ const reminderController = require('../controllers/reminderController');
 router.get('/:id/reminders', reminderController.listForApplication);
 router.post('/:id/reminders', reminderController.create);
 
+const logController = require('../controllers/logController');
+router.get('/:id/contacts', logController.listContacts);
+router.post('/:id/contacts', logController.addContact);
+router.delete('/:id/contacts/:entryId', logController.deleteContact);
+router.get('/:id/activities', logController.listActivities);
+router.post('/:id/activities', logController.addActivity);
+router.delete('/:id/activities/:entryId', logController.deleteActivity);
+
 module.exports = router;
