@@ -1,16 +1,48 @@
-const app = document.querySelector('#app');
+﻿const app = document.querySelector('#app');
 const toast = document.querySelector('#toast');
 
+/* localStorage can contain corrupt JSON (interrupted writes, privacy tooling).
+   A throw here would kill the whole script and leave a permanent blank page,
+   so every read is guarded, and a half-valid session is treated as no session. */
+function readStoredSession() {
+  let token = null;
+  let user = null;
+  try {
+    const rawToken = localStorage.getItem('cv_token');
+    if (typeof rawToken === 'string' && rawToken) token = rawToken;
+  } catch (err) { /* storage unavailable */ }
+  try {
+    const rawUser = localStorage.getItem('cv_user');
+    if (rawUser) {
+      const parsed = JSON.parse(rawUser);
+      if (parsed && typeof parsed === 'object' && (parsed.email || parsed.fullName)) {
+        user = parsed;
+      }
+    }
+  } catch (err) { /* corrupt JSON */ }
+  if (!(token && user)) {
+    try {
+      localStorage.removeItem('cv_token');
+      localStorage.removeItem('cv_user');
+    } catch (err) { /* storage unavailable */ }
+    return { token: null, user: null };
+  }
+  return { token, user };
+}
+
+const storedSession = readStoredSession();
+
 const state = {
-  token: localStorage.getItem('cv_token'),
-  user: JSON.parse(localStorage.getItem('cv_user') || 'null'),
+  token: storedSession.token,
+  user: storedSession.user,
   route: location.hash.replace('#', '') || 'dashboard',
   profile: null,
   applications: [],
+  skillLevelOptions: ['Familiar', 'Proficient', 'Advanced'],
 };
 
 /* ----------------------------------------------------------------
-   Inline icon set — understated, single-stroke, functional.
+   Inline icon set â€” understated, single-stroke, functional.
    ---------------------------------------------------------------- */
 const icons = {
   overview: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
@@ -41,6 +73,40 @@ const icons = {
 /* ----------------------------------------------------------------
    API client
    ---------------------------------------------------------------- */
+class AuthError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'AuthError';
+  }
+}
+
+// Endpoints that legitimately answer 401/403 to anonymous visitors â€” a failure
+// there must never trigger the global "session expired" logout flow.
+const PUBLIC_AUTH_PATHS = [
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/forgot-password',
+  '/api/auth/reset-password',
+];
+
+function handleSessionExpiry() {
+  if (handleSessionExpiry.locked) return;
+  handleSessionExpiry.locked = true;
+  setTimeout(() => { handleSessionExpiry.locked = false; }, 800);
+  try {
+    const current = location.hash.replace('#', '') || 'dashboard';
+    sessionStorage.setItem('cv_post_login_redirect', current);
+  } catch (err) { /* storage unavailable */ }
+  clearAuth();
+  showToast('Your session has expired. Please sign in again.', 'error');
+  const route = location.hash.replace('#', '') || 'dashboard';
+  if (route === 'login') {
+    render();
+  } else {
+    navigate('login');
+  }
+}
+
 const api = {
   async request(path, options = {}) {
     const headers = options.headers || {};
@@ -78,6 +144,16 @@ const api = {
     const contentType = response.headers.get('content-type') || '';
 
     if (!response.ok) {
+      if (response.status === 401 && !PUBLIC_AUTH_PATHS.some((p) => path.startsWith(p))) {
+        handleSessionExpiry();
+        throw new AuthError('Your session has expired. Please sign in again.');
+      }
+      if (response.status === 403 && state.user && state.user.mustChangePassword) {
+        if ((location.hash.replace('#', '') || '') !== 'update-password') {
+          navigate('update-password');
+        }
+        throw new AuthError('You must change your temporary password to proceed.');
+      }
       if (contentType.includes('application/json')) {
         const data = await response.json();
         let message = data.error || 'Request failed.';
@@ -136,7 +212,7 @@ function escapeHtml(value = '') {
 
 function initials(value = '') {
   const parts = String(value).trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return '–';
+  if (!parts.length) return 'â€“';
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
@@ -485,7 +561,7 @@ function authView(mode = 'login') {
               <div class="field auth-field">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <label for="password">Password</label>
-                  ${!isRegister ? `<a href="#forgot-password" style="font-size: 12.5px; color: var(--accent); text-decoration: none; font-weight: 550; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">Forgot password?</a>` : ''}
+                  ${!isRegister ? `<a href="#forgot-password" class="link-accent" style="font-size: 12.5px;">Forgot password?</a>` : ''}
                 </div>
                 <div class="auth-input-wrap pw-wrap">
                   <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -535,17 +611,26 @@ function authView(mode = 'login') {
     }
 
     const body = Object.fromEntries(new FormData(form).entries());
-    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), isRegister ? 'Creating…' : 'Signing in…');
+    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), isRegister ? 'Creatingâ€¦' : 'Signing inâ€¦');
     try {
       const data = await api.post(`/api/auth/${isRegister ? 'register' : 'login'}`, body);
       setAuth(data.token, data.user);
       if (isRegister) {
         sessionStorage.setItem('just_registered', '1');
       }
+
+      let target = 'dashboard';
+      try {
+        const saved = sessionStorage.getItem('cv_post_login_redirect');
+        sessionStorage.removeItem('cv_post_login_redirect');
+        const blocked = ['login', 'register', 'forgot-password', 'reset-password', 'update-password', 'terms', 'privacy'];
+        if (saved && !blocked.includes(saved)) target = saved;
+      } catch (err) { /* storage unavailable */ }
+
       if (data.requirePasswordChange) {
         navigate('update-password');
       } else {
-        navigate('dashboard');
+        navigate(target);
       }
       await render();
     } catch (err) {
@@ -613,7 +698,7 @@ async function forgotPasswordView() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
             </div>
             <h2>Forgot password?</h2>
-            <p>No worries, we'll send a temporary password to your email.</p>
+            <p>No worries. Enter your registered email and we'll send you a secure link to choose a new password.</p>
             <form class="form" id="forgotForm" novalidate>
               <div class="field auth-field">
                 <label for="email">Email Address</label>
@@ -622,16 +707,16 @@ async function forgotPasswordView() {
                   <input id="email" name="email" type="email" autocomplete="email" placeholder="you@email.com" required>
                 </div>
               </div>
-              <button class="btn primary" type="submit" style="width: 100%; margin-top: 10px;">Send Temporary Password</button>
+              <button class="btn primary" type="submit" style="width: 100%; margin-top: 10px;">Send Reset Link</button>
             </form>
             
             <div id="devLinkContainer" style="display: none; margin-top: 20px; padding: 15px; border-radius: 8px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); font-size: 13px; text-align: left;">
               <div style="font-weight: 600; color: var(--accent); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
                 <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #3b82f6; animation: pulse 2s infinite;"></span>
-                Local Demo Mode Password:
+                Local Demo Mode Reset Link:
               </div>
               <div style="color: var(--muted); margin-bottom: 8px; font-size: 12px; line-height: 1.4;">
-                SMTP is not configured in .env. Here is the generated temporary password:
+                RESEND_API_KEY is not configured. No email was sent â€” open this local link instead:
               </div>
               <div style="display: flex; gap: 8px; align-items: center;">
                 <input id="devLinkInput" readonly style="flex: 1; font-size: 12px; padding: 6px 10px; background: var(--surface-3); border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text);" />
@@ -642,7 +727,7 @@ async function forgotPasswordView() {
             </div>
 
             <p class="auth-switch" style="margin-top: 24px;">
-              <a href="#login" style="color: var(--muted); text-decoration: none; font-size: 13.5px; font-weight: 500; transition: color 0.15s;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Back to Sign In</a>
+              <a href="#login" class="muted-link" style="font-size: 13.5px;">Back to Sign In</a>
             </p>
           </div>
         </div>
@@ -653,13 +738,36 @@ async function forgotPasswordView() {
   document.querySelector('#forgotForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Sending…');
+    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Sendingâ€¦');
     const devLinkContainer = document.querySelector('#devLinkContainer');
     devLinkContainer.style.display = 'none';
 
     const emailInput = form.querySelector('#email').value;
     try {
       const res = await api.post('/api/auth/forgot-password', { email: emailInput });
+
+      if (res.devResetLink) {
+        devLinkContainer.style.display = 'block';
+        const linkInput = document.querySelector('#devLinkInput');
+        if (linkInput) {
+          linkInput.value = res.devResetLink;
+          const copyBtn = document.querySelector('#devLinkCopy');
+          if (copyBtn) {
+            copyBtn.addEventListener('click', () => {
+              navigator.clipboard?.writeText(linkInput.value).catch(() => {
+                linkInput.select();
+                document.execCommand('copy');
+              });
+              showToast('Link copied to clipboard.');
+            });
+          }
+          linkInput.focus();
+          linkInput.select();
+        }
+        showToast(res.message, 'info');
+        return;
+      }
+
       showToast(res.message, 'info');
       navigate('login');
       await render();
@@ -791,7 +899,7 @@ async function updatePasswordView() {
   }
 
   resendBtn.addEventListener('click', async () => {
-    const restore = setBtnLoading(resendBtn, 'Resending…');
+    const restore = setBtnLoading(resendBtn, 'Resendingâ€¦');
     const devLinkContainer = document.getElementById('resendDevLinkContainer');
     if (devLinkContainer) devLinkContainer.style.display = 'none';
 
@@ -799,7 +907,7 @@ async function updatePasswordView() {
       const res = await api.post('/api/auth/forgot-password', { email: state.user.email });
       const meRes = await api.get('/api/auth/me');
       setAuth(state.token, meRes.user);
-      showToast('New temporary password sent.');
+      showToast('Reset link sent. Check your email to continue.');
 
       if (timerInterval) clearInterval(timerInterval);
       
@@ -826,7 +934,7 @@ async function updatePasswordView() {
       return;
     }
 
-    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Saving…');
+    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Savingâ€¦');
     try {
       await api.post('/api/auth/update-password', Object.fromEntries(new FormData(form)));
       if (timerInterval) clearInterval(timerInterval);
@@ -843,8 +951,102 @@ async function updatePasswordView() {
   });
 }
 
+function resetPasswordView() {
+  const token = state.pendingResetToken;
+
+  if (!token) {
+    app.innerHTML = `
+      <main class="auth-shell">
+        <section class="auth-main" style="width: 100%; justify-content: center; grid-column: 1 / -1;">
+          <div class="auth-card" style="max-width: 450px;">
+            <div class="auth-card-top-bar"></div>
+            <div class="auth-card-inner">
+              <div class="auth-card-icon">${icons.alert}</div>
+              <h2>Link not valid</h2>
+              <p>This password reset link is missing its token. Request a fresh link and open it from your email.</p>
+              <button class="btn primary block" data-route="forgot-password" style="margin-top: 10px;">Request a new link</button>
+            </div>
+          </div>
+        </section>
+      </main>`;
+    document.querySelectorAll('[data-route]').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.route)));
+    return;
+  }
+
+  app.innerHTML = `
+    <main class="auth-shell">
+      <section class="auth-main" style="width: 100%; justify-content: center; grid-column: 1 / -1;">
+        <div class="auth-card" style="max-width: 450px;">
+          <div class="auth-card-top-bar"></div>
+          <div class="auth-card-inner">
+            <div class="auth-card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            </div>
+            <h2>Choose a new password</h2>
+            <p>Pick a strong new password for your account. Your reset link expires one hour after it was requested.</p>
+            <form class="form" id="resetPwForm" novalidate>
+              <div class="field auth-field">
+                <label for="newPassword">New Password</label>
+                <div class="pw-wrap">
+                  <input id="newPassword" name="newPassword" type="password" autocomplete="new-password" placeholder="At least 8 characters, 1 uppercase, 1 number" required>
+                  <button type="button" class="pw-toggle" aria-label="Show password">${icons.eyeOff}</button>
+                </div>
+              </div>
+              <div class="field auth-field">
+                <label for="confirmPassword">Confirm New Password</label>
+                <div class="pw-wrap">
+                  <input id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" placeholder="Re-enter your new password" required>
+                  <button type="button" class="pw-toggle" aria-label="Show password">${icons.eyeOff}</button>
+                </div>
+              </div>
+              <button class="btn primary block" type="submit" style="margin-top: 10px;">Save New Password</button>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>`;
+
+  wirePwToggles();
+
+  document.querySelector('#resetPwForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const newPassword = form.querySelector('#newPassword').value;
+    const confirmPassword = form.querySelector('#confirmPassword').value;
+
+    if (newPassword !== confirmPassword) {
+      showToast('New passwords do not match.', 'error');
+      return;
+    }
+    if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+      showToast('Password must be at least 8 characters, include an uppercase letter and a number.', 'error');
+      return;
+    }
+
+    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Savingâ€¦');
+    try {
+      const data = await api.post('/api/auth/reset-password', { token, newPassword });
+      setAuth(data.token, data.user);
+      state.pendingResetToken = null;
+      showToast('Password updated. Welcome back!');
+      navigate('dashboard');
+      await render();
+    } catch (err) {
+      showToast(err.message, 'error');
+      if (err.message.includes('invalid or has expired')) {
+        setTimeout(() => {
+          navigate('forgot-password');
+          render();
+        }, 1800);
+      }
+    } finally {
+      restore();
+    }
+  });
+}
+
 /* ----------------------------------------------------------------
-   Authenticated shell — left rail + topbar
+   Authenticated shell â€” left rail + topbar
    ---------------------------------------------------------------- */
 const RAIL = [
   { route: 'dashboard', label: 'Home', icon: 'overview' },
@@ -883,7 +1085,7 @@ function shell(content, { search = false } = {}) {
       <main class="main">
         <div class="topbar">
           ${search
-            ? `<label class="search"><span aria-hidden="true">${icons.search}</span><input id="globalSearch" type="search" placeholder="Search your applications…" aria-label="Search applications"></label>`
+            ? `<label class="search"><span aria-hidden="true">${icons.search}</span><input id="globalSearch" type="search" placeholder="Search your applicationsâ€¦" aria-label="Search applications"></label>`
             : '<span class="rail-spacer"></span>'}
           <div class="topbar-right" id="topbarProfile" style="cursor: pointer;" title="Go to Profile">
             <div class="greeting">
@@ -974,6 +1176,10 @@ function wireSideMenuAnimation() {
 async function loadProfile() {
   const data = await api.get('/api/profile');
   state.profile = data.profile;
+  // The backend owns the canonical skill-level enum; keep the UI synced to it.
+  if (Array.isArray(data.skillLevels) && data.skillLevels.length) {
+    state.skillLevelOptions = data.skillLevels;
+  }
   return state.profile;
 }
 
@@ -1070,7 +1276,7 @@ const TILE_COLORS = ['amber', 'coral', 'teal', 'slate'];
 
 function applicationTile(item, index) {
   const score = item.ats_match_score || 0;
-  const trend = score >= 45 ? '▲' : '▼';
+  const trend = score >= 45 ? 'â–²' : 'â–¼';
   const band = score >= 75 ? 'Strong match' : score >= 45 ? 'Partial match' : 'Low match';
   return `
     <button class="tile ${TILE_COLORS[index % TILE_COLORS.length]}" data-open-app="${item.id}">
@@ -1133,7 +1339,7 @@ function activityRow(item) {
       <span class="row-mark">${escapeHtml(initials(item.company))}</span>
       <div class="row-main">
         <div class="t">${escapeHtml(item.job_title)}</div>
-        <div class="s">${escapeHtml(item.company)}${hasLetter ? ' · cover letter ready' : ''}</div>
+        <div class="s">${escapeHtml(item.company)}${hasLetter ? ' Â· cover letter ready' : ''}</div>
       </div>
       <div class="row-right">
         <span class="score ${scoreClass(score)} num">${score}%</span>
@@ -1254,7 +1460,7 @@ async function dashboardView() {
           </section>`}
 
         <section class="chart-card">
-          <div class="panel-head"><h2>ATS trend</h2><span class="eyebrow">Oldest → newest</span></div>
+          <div class="panel-head"><h2>ATS trend</h2><span class="eyebrow">Oldest â†’ newest</span></div>
           ${buildSparkline(trendScores)}
         </section>
         
@@ -1321,7 +1527,7 @@ function quickNewForm() {
           <option value="network">Network/Event</option>
         </select>
       </div>
-      <div class="field"><label for="qDesc">Job description</label><textarea id="qDesc" name="jobDescription" placeholder="Paste the description…" required></textarea></div>
+      <div class="field"><label for="qDesc">Job description</label><textarea id="qDesc" name="jobDescription" placeholder="Paste the descriptionâ€¦" required></textarea></div>
       <button class="btn primary block" type="submit">Analyze &amp; score</button>
     </form>`;
 }
@@ -1362,11 +1568,11 @@ function wireQuickPanel() {
       const body = Object.fromEntries(new FormData(formTarget).entries());
       try {
         const data = await runWithLoader('Scoring your application', [
-          'Saving the application…',
-          'Comparing against your CV…',
-          'Scoring the match…',
-          'Listing missing skills…',
-        ], (signal) => api.post('/api/applications', body, { signal }));
+          'Saving the applicationâ€¦',
+          'Comparing against your CVâ€¦',
+          'Scoring the matchâ€¦',
+          'Listing missing skillsâ€¦',
+        ], (signal) => api.post('/api/applications', body, { signal, timeout: 90000 }));
         
         if (data.application.ats_match_score < 30) {
           showModal({
@@ -1397,10 +1603,10 @@ function wireQuickPanel() {
       const formData = new FormData(event.currentTarget);
       try {
         await runWithLoader('Parsing your CV', [
-          'Reading your CV…',
-          'Extracting experience…',
-          'Structuring skills…',
-          'Finalizing profile…',
+          'Reading your CVâ€¦',
+          'Extracting experienceâ€¦',
+          'Structuring skillsâ€¦',
+          'Finalizing profileâ€¦',
         ], (signal) => api.request('/api/profile/upload', { method: 'POST', body: formData, timeout: 120000, signal }));
         showToast('CV parsed and saved.');
         await dashboardView();
@@ -1443,7 +1649,7 @@ function textareaField(name, label, value = '') {
 function renderExperienceCard(item = {}) {
   return `
     <div class="dynamic-card experience-card" style="border: 1px solid var(--border); padding: 15px; margin-bottom: 15px; border-radius: 8px; background: var(--surface-2); position: relative;">
-      <button type="button" class="btn ghost remove-card-btn" style="position: absolute; top: 10px; right: 10px; color: var(--error); padding: 4px; width: 32px; height: 32px; min-width: 32px; line-height: 1; border-color: transparent;" title="Remove">✕</button>
+      <button type="button" class="btn ghost remove-card-btn" style="position: absolute; top: 10px; right: 10px; color: var(--error); padding: 4px; width: 32px; height: 32px; min-width: 32px; line-height: 1; border-color: transparent;" title="Remove">âœ•</button>
       <div class="grid two" style="margin-bottom: 10px;">
         <div class="field" style="margin: 0;"><label>Title</label><input type="text" class="exp-title" value="${escapeHtml(item.title || '')}" required></div>
         <div class="field" style="margin: 0;"><label>Company</label><input type="text" class="exp-company" value="${escapeHtml(item.company || '')}" required></div>
@@ -1462,7 +1668,7 @@ function renderExperienceCard(item = {}) {
 function renderEducationCard(item = {}) {
   return `
     <div class="dynamic-card education-card" style="border: 1px solid var(--border); padding: 15px; margin-bottom: 15px; border-radius: 8px; background: var(--surface-2); position: relative;">
-      <button type="button" class="btn ghost remove-card-btn" style="position: absolute; top: 10px; right: 10px; color: var(--error); padding: 4px; width: 32px; height: 32px; min-width: 32px; line-height: 1; border-color: transparent;" title="Remove">✕</button>
+      <button type="button" class="btn ghost remove-card-btn" style="position: absolute; top: 10px; right: 10px; color: var(--error); padding: 4px; width: 32px; height: 32px; min-width: 32px; line-height: 1; border-color: transparent;" title="Remove">âœ•</button>
       <div class="grid two" style="margin-bottom: 10px;">
         <div class="field" style="margin: 0;"><label>Degree</label><input type="text" class="edu-degree" value="${escapeHtml(item.degree || '')}" required></div>
         <div class="field" style="margin: 0;"><label>Institution</label><input type="text" class="edu-institution" value="${escapeHtml(item.institution || '')}" required></div>
@@ -1508,8 +1714,8 @@ function profileForm(profile = {}) {
         <button type="button" class="btn ghost" id="addEducationBtn" style="margin-top: 10px; justify-self: start;">${icons.plus} Add Education</button>
       </div>
 
-      ${textareaField('projects', 'Projects — title | type | tools | outcome | link', objectsToLines(profile.projects, ['title', 'type', 'tools', 'outcome', 'link']))}
-      ${textareaField('certifications', 'Certifications — name | issuer | year', objectsToLines(profile.certifications, ['name', 'issuer', 'year']))}
+      ${textareaField('projects', 'Projects â€” title | type | tools | outcome | link', objectsToLines(profile.projects, ['title', 'type', 'tools', 'outcome', 'link']))}
+      ${textareaField('certifications', 'Certifications â€” name | issuer | year', objectsToLines(profile.certifications, ['name', 'issuer', 'year']))}
       <div class="actions">
         <button class="btn primary" type="submit">Save profile</button>
         ${generatePremiumBtn('summaryBtn', 'Generate summary', 'Generating summary', 'button')}
@@ -1637,17 +1843,16 @@ async function profileView() {
       return acc;
     }, state.profile && state.profile.skillLevels ? state.profile.skillLevels : {});
     
-    list.innerHTML = currentSkills.map(skill => `
+    list.innerHTML = currentSkills.map(skill => {
+      const selectedLevel = existingSelects[skill] || state.skillLevelOptions[Math.floor(state.skillLevelOptions.length / 2)];
+      return `
       <div class="field" style="margin: 0;">
         <label style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">${escapeHtml(skill)}</label>
         <select class="skill-level-select" data-skill="${escapeHtml(skill)}" style="padding: 6px; font-size: 13px;">
-          <option value="Beginner" ${existingSelects[skill] === 'Beginner' ? 'selected' : ''}>Beginner</option>
-          <option value="Intermediate" ${existingSelects[skill] === 'Intermediate' || !existingSelects[skill] ? 'selected' : ''}>Intermediate</option>
-          <option value="Advanced" ${existingSelects[skill] === 'Advanced' ? 'selected' : ''}>Advanced</option>
-          <option value="Expert" ${existingSelects[skill] === 'Expert' ? 'selected' : ''}>Expert</option>
+          ${state.skillLevelOptions.map((level) => `<option value="${escapeHtml(level)}" ${selectedLevel === level ? 'selected' : ''}>${escapeHtml(level)}</option>`).join('')}
         </select>
       </div>
-    `).join('');
+    `; }).join('');
   };
 
   const skillsInput = document.getElementById('skills');
@@ -1660,7 +1865,7 @@ async function profileView() {
 
   document.querySelector('#profileForm').addEventListener('submit', async (event) => {
     event.preventDefault();
-    const restore = setBtnLoading(event.currentTarget.querySelector('button[type="submit"]'), 'Saving…');
+    const restore = setBtnLoading(event.currentTarget.querySelector('button[type="submit"]'), 'Savingâ€¦');
     try {
       // Collect skill levels
       const levels = {};
@@ -1692,10 +1897,10 @@ async function profileView() {
       const current = readProfileForm(document.querySelector('#profileForm'));
       await api.put('/api/profile', current);
       const data = await runWithLoader('Generating summary', [
-        'Reviewing your profile…',
-        'Drafting a summary…',
-        'Polishing the wording…',
-      ], (signal) => api.post('/api/profile/summary', {}, { signal }));
+        'Reviewing your profileâ€¦',
+        'Drafting a summaryâ€¦',
+        'Polishing the wordingâ€¦',
+      ], (signal) => api.post('/api/profile/summary', {}, { signal, timeout: 90000 }));
       state.profile = data.profile;
       showToast('Summary generated.');
       await profileView();
@@ -1713,10 +1918,10 @@ async function profileView() {
     const formData = new FormData(event.currentTarget);
     try {
       const data = await runWithLoader('Parsing your CV', [
-        'Reading your CV…',
-        'Extracting experience…',
-        'Structuring skills…',
-        'Finalizing profile…',
+        'Reading your CVâ€¦',
+        'Extracting experienceâ€¦',
+        'Structuring skillsâ€¦',
+        'Finalizing profileâ€¦',
       ], (signal) => api.request('/api/profile/upload', { method: 'POST', body: formData, timeout: 120000, signal }));
       state.profile = data.profile;
       showToast('CV parsed and saved.');
@@ -1819,7 +2024,7 @@ async function cvView() {
                 <div class="field">
                   <label for="level-${i}">${escapeHtml(skill)}</label>
                   <select id="level-${i}" name="${escapeHtml(skill)}">
-                    ${['Familiar', 'Proficient', 'Advanced'].map((level) => `<option value="${level}" ${(profile.skillLevels || {})[skill] === level ? 'selected' : ''}>${level}</option>`).join('')}
+                    ${state.skillLevelOptions.map((level) => `<option value="${escapeHtml(level)}" ${(profile.skillLevels || {})[skill] === level ? 'selected' : ''}>${escapeHtml(level)}</option>`).join('')}
                   </select>
                 </div>
               </div>`).join('')}
@@ -1840,7 +2045,7 @@ async function cvView() {
     skills.forEach((skill) => {
       levels[skill] = form.get(skill);
     });
-    const restore = setBtnLoading(event.submitter, 'Saving…');
+    const restore = setBtnLoading(event.submitter, 'Savingâ€¦');
     try {
       const data = await api.put('/api/profile/skill-levels', { levels });
       state.profile = data.profile;
@@ -1877,7 +2082,7 @@ async function newApplicationView() {
   shell(`
     <div class="page-title">
       <h1>New application</h1>
-      <p>Paste a job description — it is scored against your saved CV profile.</p>
+      <p>Paste a job description â€” it is scored against your saved CV profile.</p>
     </div>
     <section class="panel" style="max-width:640px">
       <form class="form" id="applicationForm">
@@ -1914,11 +2119,11 @@ async function newApplicationView() {
 
       const body = Object.fromEntries(new FormData(formTarget).entries());
       const data = await runWithLoader('Scoring your application', [
-        'Saving the application…',
-        'Comparing against your CV…',
-        'Scoring the match…',
-        'Listing missing skills…',
-      ], (signal) => api.post('/api/applications', body, { signal }));
+        'Saving the applicationâ€¦',
+        'Comparing against your CVâ€¦',
+        'Scoring the matchâ€¦',
+        'Listing missing skillsâ€¦',
+      ], (signal) => api.post('/api/applications', body, { signal, timeout: 90000 }));
 
       if (data.application.ats_match_score < 30) {
         showModal({
@@ -2128,7 +2333,7 @@ async function applicationDetailView(id) {
               <div class="standout-item">
                 <div class="standout-item-main">
                   <div class="standout-item-title">${escapeHtml(inv.title)}</div>
-                  <div class="standout-item-sub">${new Date(inv.start_time).toLocaleString()} – ${new Date(inv.end_time).toLocaleTimeString()}${inv.location ? ' · ' + escapeHtml(inv.location) : ''}</div>
+                  <div class="standout-item-sub">${new Date(inv.start_time).toLocaleString()} â€“ ${new Date(inv.end_time).toLocaleTimeString()}${inv.location ? ' Â· ' + escapeHtml(inv.location) : ''}</div>
                 </div>
                 <button class="btn ghost" data-ics="${inv.id}">${icons.calendar} .ics</button>
               </div>
@@ -2166,11 +2371,11 @@ async function applicationDetailView(id) {
     const body = Object.fromEntries(new FormData(event.currentTarget).entries());
     try {
       await runWithLoader('Writing your cover letter', [
-        'Reading the job description…',
-        'Matching your experience…',
-        'Writing the letter…',
-        'Refining the tone…',
-      ], (signal) => api.post(`/api/applications/${id}/cover-letter`, body, { signal }));
+        'Reading the job descriptionâ€¦',
+        'Matching your experienceâ€¦',
+        'Writing the letterâ€¦',
+        'Refining the toneâ€¦',
+      ], (signal) => api.post(`/api/applications/${id}/cover-letter`, body, { signal, timeout: 90000 }));
       showToast('Cover letter generated.');
       await applicationDetailView(id);
     } catch (err) {
@@ -2232,11 +2437,11 @@ async function applicationDetailView(id) {
       event.preventDefault();
       try {
         await runWithLoader('Optimizing your CV', [
-          'Analyzing job requirements…',
-          'Cross-referencing your experience…',
-          'Rewriting bullet points for impact…',
-          'Finalizing ATS compliance…',
-        ], (signal) => api.post(`/api/applications/${id}/tailor-cv`, {}, { signal }));
+          'Analyzing job requirementsâ€¦',
+          'Cross-referencing your experienceâ€¦',
+          'Rewriting bullet points for impactâ€¦',
+          'Finalizing ATS complianceâ€¦',
+        ], (signal) => api.post(`/api/applications/${id}/tailor-cv`, {}, { signal, timeout: 90000 }));
         showToast('CV optimized for this job.');
         await applicationDetailView(id);
       } catch (err) {
@@ -2256,10 +2461,10 @@ async function applicationDetailView(id) {
       event.preventDefault();
       try {
         await runWithLoader('Preparing interview strategy', [
-          'Predicting likely questions…',
-          'Finding examples from your past…',
-          'Formulating STAR method answers…',
-        ], (signal) => api.post(`/api/applications/${id}/interview-prep`, {}, { signal }));
+          'Predicting likely questionsâ€¦',
+          'Finding examples from your pastâ€¦',
+          'Formulating STAR method answersâ€¦',
+        ], (signal) => api.post(`/api/applications/${id}/interview-prep`, {}, { signal, timeout: 90000 }));
         showToast('Interview flashcards generated.');
         await applicationDetailView(id);
       } catch (err) {
@@ -2310,7 +2515,7 @@ async function applicationDetailView(id) {
       event.preventDefault();
       const body = Object.fromEntries(new FormData(event.currentTarget).entries());
       const submitBtn = document.querySelector('#saveInterviewBtn');
-      const restoreBtn = setBtnLoading(submitBtn, 'Saving…');
+      const restoreBtn = setBtnLoading(submitBtn, 'Savingâ€¦');
 
       try {
         // If they haven't ignored the conflict warning, check for conflict first
@@ -2389,7 +2594,7 @@ function wireSearch(containerSelector) {
         container.appendChild(msg);
       }
     } else {
-      // No query — collapse back to limited (shows first 3 via CSS)
+      // No query â€” collapse back to limited (shows first 3 via CSS)
       container.classList.add('limited');
     }
   });
@@ -2480,9 +2685,9 @@ async function settingsView() {
       </section>
     </div>
     <div style="margin-top: 32px; display: flex; justify-content: center; gap: 20px; font-size: 13.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 20px;">
-      <a href="#terms" style="color: var(--muted); text-decoration: none; transition: color 0.2s;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Terms & Conditions</a>
+      <a href="#terms" class="muted-link">Terms &amp; Conditions</a>
       <span>&bull;</span>
-      <a href="#privacy" style="color: var(--muted); text-decoration: none; transition: color 0.2s;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Privacy Policy</a>
+      <a href="#privacy" class="muted-link">Privacy Policy</a>
     </div>`);
 
   document.querySelectorAll('[data-route]').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.route)));
@@ -2491,7 +2696,7 @@ async function settingsView() {
   document.querySelector('#detailsForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const restore = setBtnLoading(e.submitter, 'Updating…');
+    const restore = setBtnLoading(e.submitter, 'Updatingâ€¦');
     try {
       const data = await api.put('/api/auth/details', Object.fromEntries(new FormData(form)));
       setAuth(data.token, data.user);
@@ -2511,7 +2716,7 @@ async function settingsView() {
   document.querySelector('#passwordForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const restore = setBtnLoading(e.submitter, 'Changing…');
+    const restore = setBtnLoading(e.submitter, 'Changingâ€¦');
     try {
       await api.post('/api/auth/update-password', Object.fromEntries(new FormData(form)));
       showToast('Password changed successfully.');
@@ -2530,7 +2735,7 @@ async function settingsView() {
   document.querySelector('#prefsForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const restore = setBtnLoading(e.submitter, 'Saving…');
+    const restore = setBtnLoading(e.submitter, 'Savingâ€¦');
     try {
       const template = new FormData(form).get('defaultTemplate');
       const prefs = profile.preferences || {};
@@ -2582,7 +2787,7 @@ async function settingsView() {
       
       const confirmBtn = overlay.querySelector('#confirmDeleteBtn');
       confirmBtn.addEventListener('click', async () => {
-        const restore = setBtnLoading(confirmBtn, 'Deleting…');
+        const restore = setBtnLoading(confirmBtn, 'Deletingâ€¦');
         // disable cancel button so user can't abort mid-flight
         overlay.querySelector('#cancelDeleteBtn').disabled = true;
         try {
@@ -2664,7 +2869,7 @@ async function xrayView() {
 
     // The structural checks an ATS parser cares about. Each maps to the risk
     // label(s) that would fail it, so the verdict is derived from the real
-    // analysis — a clean scan shows every check ticked, a risky one shows why.
+    // analysis â€” a clean scan shows every check ticked, a risky one shows why.
     const CHECK_DEFS = [
       { label: 'Text is machine-readable', fails: ['Scanned or image-based PDF (little or no selectable text)', 'Unreadable PDF'] },
       { label: 'Single-column reading order', fails: ['Complex Multi-Column Layout'] },
@@ -2692,7 +2897,7 @@ async function xrayView() {
     const verdictClass = allClear ? 'xray-verdict--pass' : 'xray-verdict--warn';
     const verdictMark = allClear ? markPass : markWarn;
     const verdictTitle = allClear
-      ? 'Clean parse — your CV is ATS-ready'
+      ? 'Clean parse â€” your CV is ATS-ready'
       : `${risks.length} structural risk${risks.length > 1 ? 's' : ''} to review`;
     const verdictSub = allClear
       ? 'Every line was extracted in a single, logical order. An applicant tracking system will read this document exactly the way you laid it out.'
@@ -2727,11 +2932,18 @@ async function xrayView() {
     `;
 
     // Render the PDF with the browser's native viewer by pointing an <iframe>
-    // straight at the endpoint. The auth token rides as a query param because
-    // an iframe cannot send an Authorization header.
+    // straight at the endpoint. An iframe cannot set Authorization headers, so
+    // we first exchange our session for a 60s single-purpose ticket scoped to
+    // this one document â€” the long-lived session JWT never touches a URL.
     const container = document.getElementById('pdfContainer');
-    const src = `/api/xray/${id}/pdf?token=${encodeURIComponent(state.token)}`;
-    container.innerHTML = `<iframe class="xray-pdf-embed" src="${src}" title="PDF preview"></iframe>`;
+    container.innerHTML = '';
+    try {
+      const { ticket } = await api.post(`/api/xray/${id}/pdf-ticket`);
+      const src = `/api/xray/${id}/pdf?ticket=${encodeURIComponent(ticket)}`;
+      container.innerHTML = `<iframe class="xray-pdf-embed" src="${src}" title="PDF preview"></iframe>`;
+    } catch (err) {
+      container.innerHTML = `<p class="muted" style="padding:16px;">Preview unavailable: ${escapeHtml(err.message)}</p>`;
+    }
   };
 
   const xrayForm = document.querySelector('#xrayUploadForm');
@@ -2909,11 +3121,18 @@ async function render() {
   if (queryStr) {
     queryStr.split('&').forEach((pair) => {
       const [k, v] = pair.split('=');
-      queryParams[k] = decodeURIComponent(v || '');
+      try {
+        queryParams[k] = decodeURIComponent(v || '');
+      } catch (err) {
+        queryParams[k] = v || '';
+      }
     });
   }
+  if (state.route === 'reset-password') {
+    state.pendingResetToken = queryParams.token || null;
+  }
 
-  const publicRoutes = ['terms', 'privacy', 'register', 'login', 'forgot-password'];
+  const publicRoutes = ['terms', 'privacy', 'register', 'login', 'forgot-password', 'reset-password'];
   if (!state.token && !publicRoutes.includes(state.route)) {
     authView('login');
     return;
@@ -2930,6 +3149,7 @@ async function render() {
       else if (state.route === 'privacy') await privacyView();
       else if (state.route === 'register') authView('register');
       else if (state.route === 'forgot-password') await forgotPasswordView();
+      else if (state.route === 'reset-password') await resetPasswordView();
       else authView('login');
       return;
     }
@@ -2944,6 +3164,7 @@ async function render() {
     else if (state.route === 'settings') await settingsView();
     else if (state.route === 'xray') await xrayView();
     else if (state.route === 'forgot-password') await forgotPasswordView();
+    else if (state.route === 'reset-password') await resetPasswordView();
     else if (state.route === 'update-password') await updatePasswordView();
     else if (state.route.startsWith('application:')) await applicationDetailView(state.route.split(':')[1]);
     else {
@@ -2951,14 +3172,26 @@ async function render() {
       await dashboardView();
     }
   } catch (err) {
-    if (err.message.toLowerCase().includes('token')) {
-      clearAuth();
-      authView();
-    } else {
-      shell(`<section class="panel">${emptyState({ icon: 'alert', title: 'Something went wrong', message: err.message })}</section>`);
-    }
+    // Auth failures are handled centrally by the API client interceptor.
+    if (err && err.name === 'AuthError') return;
+    shell(`<section class="panel">${emptyState({ icon: 'alert', title: 'Something went wrong', message: err.message })}</section>`);
   }
 }
 
-window.addEventListener('hashchange', render);
-render();
+function showBootError() {
+  try {
+    clearAuth();
+  } catch (err) { /* noop */ }
+  try {
+    authView('login');
+  } catch (err) {
+    const root = document.querySelector('#app');
+    if (root) root.textContent = 'The application failed to start. Please refresh the page.';
+  }
+}
+
+window.addEventListener('hashchange', () => {
+  render().catch(showBootError);
+});
+
+render().catch(showBootError);

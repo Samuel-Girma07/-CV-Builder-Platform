@@ -2846,3 +2846,23 @@ input[type="checkbox"] {
     drop-shadow(0 -4px 6px #0009);
   animation: none;
 }
+
+/* CSP-safe link affordances (replaces inline JS hover handlers) */
+.muted-link {
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.15s;
+}
+.muted-link:hover {
+  color: var(--text);
+}
+.link-accent {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 550;
+  transition: opacity 0.2s;
+}
+.link-accent:hover {
+  opacity: 0.8;
+}
