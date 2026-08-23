@@ -1,5 +1,21 @@
-﻿const app = document.querySelector('#app');
+const app = document.querySelector('#app');
 const toast = document.querySelector('#toast');
+
+/* Theme boot: persisted choice wins over the dark-first default. Applied
+   before first paint so light-theme users never see a dark flash. */
+(function initTheme() {
+  let theme = 'dark';
+  try {
+    if (localStorage.getItem('cv_theme') === 'light') theme = 'light';
+  } catch (err) { /* storage unavailable */ }
+  document.documentElement.dataset.theme = theme;
+})();
+
+function toggleTheme() {
+  const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('cv_theme', next); } catch (err) { /* storage unavailable */ }
+}
 
 /* localStorage can contain corrupt JSON (interrupted writes, privacy tooling).
    A throw here would kill the whole script and leave a permanent blank page,
@@ -42,7 +58,7 @@ const state = {
 };
 
 /* ----------------------------------------------------------------
-   Inline icon set — understated, single-stroke, functional.
+   Inline icon set � understated, single-stroke, functional.
    ---------------------------------------------------------------- */
 const icons = {
   overview: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
@@ -67,7 +83,9 @@ const icons = {
   calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>',
   xray: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.2 15c.7-1.2 1-2.5.7-3.9-.6-2-2.4-3.5-4.4-3.5h-1.2c-.7-3-3.2-5.2-6.2-5.6-3-.3-5.9 1.3-7.3 4-1.2 2.5-1 6.5.5 8.8m8.7-1.6V21"/><path d="M16 16v5"/><path d="M8 16v5"/></svg>',
   eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
-  eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+  eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>',
+  sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>',
+  moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>'
 };
 
 /* ----------------------------------------------------------------
@@ -80,7 +98,7 @@ class AuthError extends Error {
   }
 }
 
-// Endpoints that legitimately answer 401/403 to anonymous visitors — a failure
+// Endpoints that legitimately answer 401/403 to anonymous visitors � a failure
 // there must never trigger the global "session expired" logout flow.
 const PUBLIC_AUTH_PATHS = [
   '/api/auth/login',
@@ -212,7 +230,7 @@ function escapeHtml(value = '') {
 
 function initials(value = '') {
   const parts = String(value).trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return '–';
+  if (!parts.length) return '�';
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
@@ -321,7 +339,7 @@ function aiLoader(title, steps, onCancel) {
       window.clearInterval(tick);
       overlay.remove();
     },
-    /* Live progress override (e.g. streaming char counts) — pauses the
+    /* Live progress override (e.g. streaming char counts) � pauses the
        rotating step messages until cleared. */
     setStatus(text) {
       statusEl.textContent = text;
@@ -417,15 +435,16 @@ function wireClamps(root = document) {
 }
 
 function showModal({ title, content, actions = [] }) {
+  const prevFocus = document.activeElement;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
-  
-  const buttonsHtml = actions.map((action, i) => 
+
+  const buttonsHtml = actions.map((action, i) =>
     `<button class="btn ${action.primary ? 'primary' : 'ghost'}" id="modal-btn-${i}">${escapeHtml(action.label)}</button>`
   ).join('');
 
   overlay.innerHTML = `
-    <div class="modal-dialog" role="dialog" aria-modal="true">
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}" tabindex="-1">
       <div class="modal-head">
         <h2>${escapeHtml(title)}</h2>
       </div>
@@ -435,13 +454,34 @@ function showModal({ title, content, actions = [] }) {
       </div>
     </div>
   `;
-  
+
   document.body.appendChild(overlay);
 
   const close = () => {
     overlay.style.opacity = '0';
     setTimeout(() => overlay.remove(), 200);
+    document.removeEventListener('keydown', onKey, true);
+    if (prevFocus && typeof prevFocus.focus === 'function') prevFocus.focus();
   };
+
+  // Focus trap: Tab cycles inside the dialog, Esc dismisses.
+  const dialog = overlay.querySelector('.modal-dialog');
+  const focusables = () => [...dialog.querySelectorAll('button')];
+  const onKey = (e) => {
+    if (e.key === 'Escape') { e.stopPropagation(); close(); return; }
+    if (e.key !== 'Tab') return;
+    const items = focusables();
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault(); first.focus();
+    }
+  };
+  overlay.addEventListener('keydown', onKey, true);
+  (focusables()[0] || dialog).focus();
 
   actions.forEach((action, i) => {
     const btn = overlay.querySelector(`#modal-btn-${i}`);
@@ -618,7 +658,7 @@ function authView(mode = 'login') {
     }
 
     const body = Object.fromEntries(new FormData(form).entries());
-    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), isRegister ? 'Creating account…' : 'Signing in…');
+    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), isRegister ? 'Creating account�' : 'Signing in�');
     try {
       const data = await api.post(`/api/auth/${isRegister ? 'register' : 'login'}`, body);
       if (data.twoFactorRequired) {
@@ -679,7 +719,7 @@ function authView(mode = 'login') {
       oldForm.addEventListener('submit', async (event) => {
         event.preventDefault();
         const token = document.getElementById('totpCode').value.trim();
-        const restore = setBtnLoading(oldForm.querySelector('button[type="submit"]'), 'Verifying…');
+        const restore = setBtnLoading(oldForm.querySelector('button[type="submit"]'), 'Verifying�');
         try {
           const data = await api.post('/api/auth/login', { email, password, token });
           await authView.finishLogin(data);
@@ -769,7 +809,7 @@ async function forgotPasswordView() {
                 Local Demo Mode Reset Link:
               </div>
               <div style="color: var(--muted); margin-bottom: 8px; font-size: 12px; line-height: 1.4;">
-                RESEND_API_KEY is not configured. No email was sent — open this local link instead:
+                RESEND_API_KEY is not configured. No email was sent � open this local link instead:
               </div>
               <div style="display: flex; gap: 8px; align-items: center;">
                 <input id="devLinkInput" readonly style="flex: 1; font-size: 12px; padding: 6px 10px; background: var(--surface-3); border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text);" />
@@ -791,7 +831,7 @@ async function forgotPasswordView() {
   document.querySelector('#forgotForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Sending…');
+    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Sending�');
     const devLinkContainer = document.querySelector('#devLinkContainer');
     devLinkContainer.style.display = 'none';
 
@@ -973,7 +1013,7 @@ async function updatePasswordView() {
   };
 
   resendBtn.addEventListener('click', async () => {
-    const restore = setBtnLoading(resendBtn, 'Resending…');
+    const restore = setBtnLoading(resendBtn, 'Resending�');
     const devContainer = document.getElementById('resendDevLinkContainer');
     if (devContainer) devContainer.style.display = 'none';
 
@@ -1022,7 +1062,7 @@ async function updatePasswordView() {
       return;
     }
 
-    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Saving…');
+    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Saving�');
     try {
       await api.post('/api/auth/update-password', Object.fromEntries(new FormData(form)));
       if (timerInterval) clearInterval(timerInterval);
@@ -1111,7 +1151,7 @@ function resetPasswordView() {
       return;
     }
 
-    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Saving…');
+    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Saving�');
     try {
       const data = await api.post('/api/auth/reset-password', { token, newPassword });
       setAuth(data.token, data.user);
@@ -1134,7 +1174,7 @@ function resetPasswordView() {
 }
 
 /* ----------------------------------------------------------------
-   Authenticated shell — left rail + topbar
+   Authenticated shell � left rail + topbar
    ---------------------------------------------------------------- */
 const RAIL = [
   { route: 'dashboard', label: 'Home', icon: 'overview' },
@@ -1173,9 +1213,14 @@ function shell(content, { search = false } = {}) {
       <main class="main">
         <div class="topbar">
           ${search
-            ? `<label class="search"><span aria-hidden="true">${icons.search}</span><input id="globalSearch" type="search" placeholder="Search your applications…" aria-label="Search applications"></label>`
+            ? `<label class="search"><span aria-hidden="true">${icons.search}</span><input id="globalSearch" type="search" placeholder="Search your applications�" aria-label="Search applications"></label>`
             : '<span class="rail-spacer"></span>'}
-          <div class="topbar-right" id="topbarProfile" style="cursor: pointer;" title="Go to Profile">
+          <div class="topbar-right" style="display:flex; align-items:center; gap:10px;">
+            <button class="btn ghost" id="themeToggle" title="Toggle light / dark" aria-label="Toggle color theme"
+              style="padding:8px; width:38px; height:38px; min-width:38px; display:inline-flex; align-items:center; justify-content:center;">
+              ${document.documentElement.dataset.theme === 'light' ? icons.moon : icons.sun}
+            </button>
+            <div id="topbarProfile" style="cursor: pointer;" title="Go to Profile">
             <div class="greeting">
               <div class="hi">${greetWord()},</div>
               <div class="nm">${escapeHtml(name)}</div>
@@ -1198,6 +1243,14 @@ function shell(content, { search = false } = {}) {
     button.addEventListener('click', () => navigate(button.dataset.route));
   });
   document.querySelector('#topbarProfile').addEventListener('click', () => navigate('profile'));
+  const themeToggle = document.getElementById('themeToggle');
+  if (themeToggle) {
+    themeToggle.addEventListener('click', () => {
+      toggleTheme();
+      const t = document.documentElement.dataset.theme;
+      themeToggle.innerHTML = t === 'light' ? icons.moon : icons.sun;
+    });
+  }
   document.querySelector('#logoutBtn').addEventListener('click', () => {
     clearAuth();
     authView();
@@ -1313,7 +1366,7 @@ function describeProfileDiff(current, snapshot) {
   for (const [label, get] of pairs) {
     const a = get(current);
     const b = get(snapshot);
-    if (a !== b) parts.push(`${label} ${a}→${b}`);
+    if (a !== b) parts.push(`${label} ${a}?${b}`);
   }
   return parts.join(', ');
 }
@@ -1385,7 +1438,7 @@ const TILE_COLORS = ['amber', 'coral', 'teal', 'slate'];
 
 function applicationTile(item, index) {
   const score = item.ats_match_score || 0;
-  const trend = score >= 45 ? '▲' : '▼';
+  const trend = score >= 45 ? '?' : '?';
   const band = score >= 75 ? 'Strong match' : score >= 45 ? 'Partial match' : 'Low match';
   return `
     <button class="tile ${TILE_COLORS[index % TILE_COLORS.length]}" data-open-app="${item.id}">
@@ -1448,7 +1501,7 @@ function activityRow(item) {
       <span class="row-mark">${escapeHtml(initials(item.company))}</span>
       <div class="row-main">
         <div class="t">${escapeHtml(item.job_title)}</div>
-        <div class="s">${escapeHtml(item.company)}${hasLetter ? ' · cover letter ready' : ''}</div>
+        <div class="s">${escapeHtml(item.company)}${hasLetter ? ' � cover letter ready' : ''}</div>
       </div>
       <div class="row-right">
         <span class="score ${scoreClass(score)} num">${score}%</span>
@@ -1467,12 +1520,12 @@ function buildOutcomePanel(outcomes) {
   const rows = outcomes.insights.map((ins) => {
     const name = escapeHtml(ins.feature);
     if (!ins.sampleOk) {
-      return `<div class="outcome-row"><span class="outcome-name">${name}</span><span class="muted" style="font-size:12.5px;">Not enough data yet — use it on a few more applications.</span></div>`;
+      return `<div class="outcome-row"><span class="outcome-name">${name}</span><span class="muted" style="font-size:12.5px;">Not enough data yet � use it on a few more applications.</span></div>`;
     }
     const uplift = ins.uplift === null
       ? '<span class="outcome-uplift">new effect</span>'
-      : ins.uplift > 1 ? `<span class="outcome-uplift">${ins.uplift}× interviews</span>`
-      : ins.uplift < 1 ? `<span class="outcome-uplift negative">${ins.uplift}× interviews</span>`
+      : ins.uplift > 1 ? `<span class="outcome-uplift">${ins.uplift}� interviews</span>`
+      : ins.uplift < 1 ? `<span class="outcome-uplift negative">${ins.uplift}� interviews</span>`
       : '';
     return `
       <div class="outcome-row">
@@ -1497,14 +1550,14 @@ function buildSkillGapPanel(insight) {
   const max = gaps[0].total || 1;
   const rows = gaps.map((gap) => {
     const pct = Math.max(6, Math.round((gap.total / max) * 100));
-    const trendMark = gap.trend === 'rising' ? '<span class="trend-up">▲</span>'
-      : gap.trend === 'falling' ? '<span class="trend-down">▼</span>'
-      : '<span class="muted">–</span>';
+    const trendMark = gap.trend === 'rising' ? '<span class="trend-up">?</span>'
+      : gap.trend === 'falling' ? '<span class="trend-down">?</span>'
+      : '<span class="muted">�</span>';
     return `
       <div class="gap-row">
         <div class="gap-head">
           <span class="gap-skill">${escapeHtml(gap.skill)}</span>
-          <span class="gap-meta">${trendMark} ${gap.total}×${gap.recentCount > 0 ? ` · ${gap.recentCount} in last 30d` : ''}</span>
+          <span class="gap-meta">${trendMark} ${gap.total}�${gap.recentCount > 0 ? ` � ${gap.recentCount} in last 30d` : ''}</span>
         </div>
         <div class="gap-bar-track"><div class="gap-bar-fill" style="width:${pct}%"></div></div>
       </div>`;
@@ -1642,7 +1695,7 @@ async function dashboardView() {
           </section>`}
 
         <section class="chart-card">
-          <div class="panel-head"><h2>ATS trend</h2><span class="eyebrow">Oldest → newest</span></div>
+          <div class="panel-head"><h2>ATS trend</h2><span class="eyebrow">Oldest ? newest</span></div>
           ${buildSparkline(trendScores)}
         </section>
         
@@ -1719,7 +1772,7 @@ function quickNewForm() {
           <option value="network">Network/Event</option>
         </select>
       </div>
-      <div class="field"><label for="qDesc">Job description</label><textarea id="qDesc" name="jobDescription" placeholder="Paste the description…" required></textarea></div>
+      <div class="field"><label for="qDesc">Job description</label><textarea id="qDesc" name="jobDescription" placeholder="Paste the description�" required></textarea></div>
       <button class="btn primary block" type="submit">Analyze &amp; score</button>
     </form>`;
 }
@@ -1760,10 +1813,10 @@ function wireQuickPanel() {
       const body = Object.fromEntries(new FormData(formTarget).entries());
       try {
         const data = await runWithLoader('Scoring your application', [
-          'Saving the application…',
-          'Comparing against your CV…',
-          'Scoring the match…',
-          'Listing missing skills…',
+          'Saving the application�',
+          'Comparing against your CV�',
+          'Scoring the match�',
+          'Listing missing skills�',
         ], (signal) => api.post('/api/applications', body, { signal, timeout: 90000 }));
         
         if (data.application.ats_match_score < 30) {
@@ -1795,10 +1848,10 @@ function wireQuickPanel() {
       const formData = new FormData(event.currentTarget);
       try {
         await runWithLoader('Parsing your CV', [
-          'Reading your CV…',
-          'Extracting experience…',
-          'Structuring skills…',
-          'Finalizing profile…',
+          'Reading your CV�',
+          'Extracting experience�',
+          'Structuring skills�',
+          'Finalizing profile�',
         ], (signal) => api.request('/api/profile/upload', { method: 'POST', body: formData, timeout: 120000, signal }));
         showToast('CV parsed and saved.');
         await dashboardView();
@@ -1841,7 +1894,7 @@ function textareaField(name, label, value = '') {
 function renderExperienceCard(item = {}) {
   return `
     <div class="dynamic-card experience-card" style="border: 1px solid var(--border); padding: 15px; margin-bottom: 15px; border-radius: 8px; background: var(--surface-2); position: relative;">
-      <button type="button" class="btn ghost remove-card-btn" style="position: absolute; top: 10px; right: 10px; color: var(--error); padding: 4px; width: 32px; height: 32px; min-width: 32px; line-height: 1; border-color: transparent;" title="Remove">✕</button>
+      <button type="button" class="btn ghost remove-card-btn" style="position: absolute; top: 10px; right: 10px; color: var(--error); padding: 4px; width: 32px; height: 32px; min-width: 32px; line-height: 1; border-color: transparent;" title="Remove" aria-label="Remove entry">?</button>
       <div class="grid two" style="margin-bottom: 10px;">
         <div class="field" style="margin: 0;"><label>Title</label><input type="text" class="exp-title" value="${escapeHtml(item.title || '')}" required></div>
         <div class="field" style="margin: 0;"><label>Company</label><input type="text" class="exp-company" value="${escapeHtml(item.company || '')}" required></div>
@@ -1860,7 +1913,7 @@ function renderExperienceCard(item = {}) {
 function renderEducationCard(item = {}) {
   return `
     <div class="dynamic-card education-card" style="border: 1px solid var(--border); padding: 15px; margin-bottom: 15px; border-radius: 8px; background: var(--surface-2); position: relative;">
-      <button type="button" class="btn ghost remove-card-btn" style="position: absolute; top: 10px; right: 10px; color: var(--error); padding: 4px; width: 32px; height: 32px; min-width: 32px; line-height: 1; border-color: transparent;" title="Remove">✕</button>
+      <button type="button" class="btn ghost remove-card-btn" style="position: absolute; top: 10px; right: 10px; color: var(--error); padding: 4px; width: 32px; height: 32px; min-width: 32px; line-height: 1; border-color: transparent;" title="Remove" aria-label="Remove entry">?</button>
       <div class="grid two" style="margin-bottom: 10px;">
         <div class="field" style="margin: 0;"><label>Degree</label><input type="text" class="edu-degree" value="${escapeHtml(item.degree || '')}" required></div>
         <div class="field" style="margin: 0;"><label>Institution</label><input type="text" class="edu-institution" value="${escapeHtml(item.institution || '')}" required></div>
@@ -1906,8 +1959,8 @@ function profileForm(profile = {}) {
         <button type="button" class="btn ghost" id="addEducationBtn" style="margin-top: 10px; justify-self: start;">${icons.plus} Add Education</button>
       </div>
 
-      ${textareaField('projects', 'Projects — title | type | tools | outcome | link', objectsToLines(profile.projects, ['title', 'type', 'tools', 'outcome', 'link']))}
-      ${textareaField('certifications', 'Certifications — name | issuer | year', objectsToLines(profile.certifications, ['name', 'issuer', 'year']))}
+      ${textareaField('projects', 'Projects � title | type | tools | outcome | link', objectsToLines(profile.projects, ['title', 'type', 'tools', 'outcome', 'link']))}
+      ${textareaField('certifications', 'Certifications � name | issuer | year', objectsToLines(profile.certifications, ['name', 'issuer', 'year']))}
       <div class="actions">
         <button class="btn primary" type="submit">Save profile</button>
         ${generatePremiumBtn('summaryBtn', 'Generate summary', 'Generating summary', 'button')}
@@ -2058,7 +2111,7 @@ async function profileView() {
 
   document.querySelector('#profileForm').addEventListener('submit', async (event) => {
     event.preventDefault();
-    const restore = setBtnLoading(event.currentTarget.querySelector('button[type="submit"]'), 'Saving…');
+    const restore = setBtnLoading(event.currentTarget.querySelector('button[type="submit"]'), 'Saving�');
     try {
       // Collect skill levels
       const levels = {};
@@ -2090,9 +2143,9 @@ async function profileView() {
       const current = readProfileForm(document.querySelector('#profileForm'));
       await api.put('/api/profile', current);
       const data = await runWithLoader('Generating summary', [
-        'Reviewing your profile…',
-        'Drafting a summary…',
-        'Polishing the wording…',
+        'Reviewing your profile�',
+        'Drafting a summary�',
+        'Polishing the wording�',
       ], (signal) => api.post('/api/profile/summary', {}, { signal, timeout: 90000 }));
       state.profile = data.profile;
       showToast('Summary generated.');
@@ -2111,10 +2164,10 @@ async function profileView() {
     const formData = new FormData(event.currentTarget);
     try {
       const data = await runWithLoader('Parsing your CV', [
-        'Reading your CV…',
-        'Extracting experience…',
-        'Structuring skills…',
-        'Finalizing profile…',
+        'Reading your CV�',
+        'Extracting experience�',
+        'Structuring skills�',
+        'Finalizing profile�',
       ], (signal) => api.request('/api/profile/upload', { method: 'POST', body: formData, timeout: 120000, signal }));
       state.profile = data.profile;
       showToast('CV parsed and saved.');
@@ -2148,7 +2201,7 @@ async function profileView() {
           ${versions.map((v) => `
             <div class="section-item" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
               <div style="min-width:0;">
-                <div style="font-size:13px; font-weight:500;">${escapeHtml(TRIGGER_LABELS[v.trigger] || v.trigger)}${v.restored_from ? ` · from #${v.restored_from}` : ''}</div>
+                <div style="font-size:13px; font-weight:500;">${escapeHtml(TRIGGER_LABELS[v.trigger] || v.trigger)}${v.restored_from ? ` � from #${v.restored_from}` : ''}</div>
                 <div class="muted" style="font-size:12px;">${new Date(v.created_at).toLocaleString()}</div>
               </div>
               <button class="btn ghost" data-version-id="${v.id}" style="flex-shrink:0; padding:4px 10px; font-size:12px;">Restore</button>
@@ -2296,7 +2349,7 @@ async function cvView() {
     skills.forEach((skill) => {
       levels[skill] = form.get(skill);
     });
-    const restore = setBtnLoading(event.submitter, 'Saving…');
+    const restore = setBtnLoading(event.submitter, 'Saving�');
     try {
       const data = await api.put('/api/profile/skill-levels', { levels });
       state.profile = data.profile;
@@ -2333,7 +2386,7 @@ async function newApplicationView() {
   shell(`
     <div class="page-title">
       <h1>New application</h1>
-      <p>Paste a job description — it is scored against your saved CV profile.</p>
+      <p>Paste a job description � it is scored against your saved CV profile.</p>
     </div>
     <section class="panel" style="max-width:640px">
       <form class="form" id="applicationForm">
@@ -2370,10 +2423,10 @@ async function newApplicationView() {
 
       const body = Object.fromEntries(new FormData(formTarget).entries());
       const data = await runWithLoader('Scoring your application', [
-        'Saving the application…',
-        'Comparing against your CV…',
-        'Scoring the match…',
-        'Listing missing skills…',
+        'Saving the application�',
+        'Comparing against your CV�',
+        'Scoring the match�',
+        'Listing missing skills�',
       ], (signal) => api.post('/api/applications', body, { signal, timeout: 90000 }));
 
       if (data.application.ats_match_score < 30) {
@@ -2600,7 +2653,7 @@ async function applicationDetailView(id) {
               <div class="standout-item">
                 <div class="standout-item-main">
                   <div class="standout-item-title">${escapeHtml(inv.title)}</div>
-                  <div class="standout-item-sub">${new Date(inv.start_time).toLocaleString()} – ${new Date(inv.end_time).toLocaleTimeString()}${inv.location ? ' · ' + escapeHtml(inv.location) : ''}</div>
+                  <div class="standout-item-sub">${new Date(inv.start_time).toLocaleString()} � ${new Date(inv.end_time).toLocaleTimeString()}${inv.location ? ' � ' + escapeHtml(inv.location) : ''}</div>
                 </div>
                 <button class="btn ghost" data-ics="${inv.id}">${icons.calendar} .ics</button>
               </div>
@@ -2694,10 +2747,10 @@ async function applicationDetailView(id) {
     /* Streaming generation: mint a short-lived ticket (the SSE reader cannot
        send Authorization headers), then render deltas as they arrive. */
     const loader = aiLoader('Writing your cover letter', [
-      'Reading the job description…',
-      'Matching your experience…',
-      'Writing the letter…',
-      'Refining the tone…',
+      'Reading the job description�',
+      'Matching your experience�',
+      'Writing the letter�',
+      'Refining the tone�',
     ], () => abort.abort());
 
     let preview = document.getElementById('coverLetterStream');
@@ -2741,10 +2794,10 @@ async function applicationDetailView(id) {
           const payloadData = JSON.parse(dataLine);
           if (eventName === 'delta') {
             preview.textContent += payloadData.t;
-            loader.setStatus(`${preview.textContent.length} characters drafted…`);
+            loader.setStatus(`${preview.textContent.length} characters drafted�`);
           } else if (eventName === 'reset') {
             preview.textContent = '';
-            loader.setStatus('Restarting with a faster model…');
+            loader.setStatus('Restarting with a faster model�');
           } else if (eventName === 'done') {
             done = true;
           } else if (eventName === 'error') {
@@ -2817,10 +2870,10 @@ async function applicationDetailView(id) {
       event.preventDefault();
       try {
         await runWithLoader('Optimizing your CV', [
-          'Analyzing job requirements…',
-          'Cross-referencing your experience…',
-          'Rewriting bullet points for impact…',
-          'Finalizing ATS compliance…',
+          'Analyzing job requirements�',
+          'Cross-referencing your experience�',
+          'Rewriting bullet points for impact�',
+          'Finalizing ATS compliance�',
         ], (signal) => api.post(`/api/applications/${id}/tailor-cv`, {}, { signal, timeout: 90000 }));
         showToast('CV optimized for this job.');
         await applicationDetailView(id);
@@ -2841,9 +2894,9 @@ async function applicationDetailView(id) {
       event.preventDefault();
       try {
         await runWithLoader('Preparing interview strategy', [
-          'Predicting likely questions…',
-          'Finding examples from your past…',
-          'Formulating STAR method answers…',
+          'Predicting likely questions�',
+          'Finding examples from your past�',
+          'Formulating STAR method answers�',
         ], (signal) => api.post(`/api/applications/${id}/interview-prep`, {}, { signal, timeout: 90000 }));
         showToast('Interview flashcards generated.');
         await applicationDetailView(id);
@@ -2870,7 +2923,7 @@ async function applicationDetailView(id) {
       }
       reminderList.innerHTML = reminders.map((r) => `
         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:6px 0;">
-          <span style="font-size:13px;">${r.status === 'pending' ? '⏰' : '✓'} ${new Date(r.remind_at).toLocaleString()}${r.message ? ` · ${escapeHtml(r.message)}` : ''}</span>
+          <span style="font-size:13px;">${r.status === 'pending' ? '?' : '?'} ${new Date(r.remind_at).toLocaleString()}${r.message ? ` � ${escapeHtml(r.message)}` : ''}</span>
           ${r.status === 'pending' ? `<button class="btn ghost" data-dismiss-reminder="${r.id}" style="padding:2px 8px; font-size:12px;">Dismiss</button>` : ''}
         </div>`).join('');
       reminderList.querySelectorAll('[data-dismiss-reminder]').forEach((b) => {
@@ -2946,7 +2999,7 @@ async function applicationDetailView(id) {
       event.preventDefault();
       const body = Object.fromEntries(new FormData(event.currentTarget).entries());
       const submitBtn = document.querySelector('#saveInterviewBtn');
-      const restoreBtn = setBtnLoading(submitBtn, 'Saving…');
+      const restoreBtn = setBtnLoading(submitBtn, 'Saving�');
 
       try {
         // If they haven't ignored the conflict warning, check for conflict first
@@ -2998,8 +3051,8 @@ function wireMockInterview(appId) {
         ${critique && typeof critique === 'object' ? `
           <div class="mock-critique">
             <span class="mock-rating ${critique.rating >= 70 ? 'good' : critique.rating >= 40 ? 'ok' : 'weak'}">${critique.rating}/100</span>
-            ${(critique.strengths || []).length ? `<div><strong>Strengths:</strong> ${escapeHtml(critique.strengths.join(' · '))}</div>` : ''}
-            ${(critique.improvements || []).length ? `<div><strong>Improve:</strong> ${escapeHtml(critique.improvements.join(' · '))}</div>` : ''}
+            ${(critique.strengths || []).length ? `<div><strong>Strengths:</strong> ${escapeHtml(critique.strengths.join(' � '))}</div>` : ''}
+            ${(critique.improvements || []).length ? `<div><strong>Improve:</strong> ${escapeHtml(critique.improvements.join(' � '))}</div>` : ''}
             ${critique.sample_answer ? `<details><summary>Stronger sample answer</summary><div style="margin-top:6px;">${escapeHtml(critique.sample_answer)}</div></details>` : ''}
           </div>` : ''}
       </div>`;
@@ -3008,12 +3061,12 @@ function wireMockInterview(appId) {
   const paint = () => {
     const answered = messages.filter((m) => m.role === 'candidate').length;
     chat.innerHTML = `
-      ${session ? `<div class="mock-progress">${session.mode} · Question ${Math.min(answered + (session.status === 'active' ? 1 : 0), session.question_count)} of ${session.question_count}${session.status !== 'active' ? ` · Finished` : ''}</div>` : ''}
+      ${session ? `<div class="mock-progress">${session.mode} � Question ${Math.min(answered + (session.status === 'active' ? 1 : 0), session.question_count)} of ${session.question_count}${session.status !== 'active' ? ` � Finished` : ''}</div>` : ''}
       <div class="mock-chat">${messages.map(bubble).join('')}</div>
       <div id="mockReport"></div>
       ${session && session.status === 'active' ? `
         <form class="form" id="mockAnswerForm" style="margin-top:12px;">
-          <textarea id="mockAnswerText" rows="4" placeholder="Type your answer…" required></textarea>
+          <textarea id="mockAnswerText" rows="4" placeholder="Type your answer�" required></textarea>
           <div class="actions" style="margin-top:8px;">
             <button class="btn primary" type="submit">Send answer</button>
           </div>
@@ -3030,7 +3083,7 @@ function wireMockInterview(appId) {
         const textEl = document.getElementById('mockAnswerText');
         const text = textEl.value.trim();
         if (!text) return;
-        const restore = setBtnLoading(form.querySelector('button[type=submit]'), 'Coach is thinking…');
+        const restore = setBtnLoading(form.querySelector('button[type=submit]'), 'Coach is thinking�');
         try {
           const data = await api.post(`/api/mock-interviews/session/${session.id}/answer`, { text });
           messages.push(data.candidateMessage, data.coachMessage);
@@ -3048,7 +3101,7 @@ function wireMockInterview(appId) {
   };
 
   async function start() {
-    const restore = setBtnLoading(startBtn, 'Preparing…');
+    const restore = setBtnLoading(startBtn, 'Preparing�');
     try {
       const data = await api.post(`/api/mock-interviews/${appId}/start`, { mode: modeSel.value });
       session = data.session;
@@ -3077,8 +3130,8 @@ function wireApplicationLog(appId) {
       const { contacts } = await api.get(`/api/applications/${appId}/contacts`);
       contactList.innerHTML = contacts.length ? contacts.map((c) => `
         <div style="display:flex; justify-content:space-between; gap:10px; padding:5px 0; font-size:13px;">
-          <span><strong>${escapeHtml(c.name)}</strong>${c.role ? ` · ${escapeHtml(c.role)}` : ''}${c.email ? `<br><span class="muted" style="font-size:12px;">${escapeHtml(c.email)}${c.phone ? ' · ' + escapeHtml(c.phone) : ''}</span>` : ''}</span>
-          <button class="btn ghost" data-del-contact="${c.id}" style="padding:2px 8px; font-size:12px; align-self:flex-start;">✕</button>
+          <span><strong>${escapeHtml(c.name)}</strong>${c.role ? ` � ${escapeHtml(c.role)}` : ''}${c.email ? `<br><span class="muted" style="font-size:12px;">${escapeHtml(c.email)}${c.phone ? ' � ' + escapeHtml(c.phone) : ''}</span>` : ''}</span>
+          <button class="btn ghost" data-del-contact="${c.id}" aria-label="Delete contact" style="padding:2px 8px; font-size:12px; align-self:flex-start;">?</button>
         </div>`).join('')
         : '<span class="muted" style="font-size:12.5px;">No contacts yet.</span>';
       contactList.querySelectorAll('[data-del-contact]').forEach((b) => {
@@ -3101,7 +3154,7 @@ function wireApplicationLog(appId) {
       activityList.innerHTML = activities.length ? activities.map((a) => `
         <div style="display:flex; justify-content:space-between; gap:10px; padding:5px 0; font-size:13px;">
           <span><span class="tag">${escapeHtml(KIND_LABELS[a.kind] || a.kind)}</span> ${new Date(a.occurred_at).toLocaleDateString()}${a.content ? `<br><span class="muted" style="font-size:12px;">${escapeHtml(a.content)}</span>` : ''}</span>
-          <button class="btn ghost" data-del-activity="${a.id}" style="padding:2px 8px; font-size:12px; align-self:flex-start;">✕</button>
+          <button class="btn ghost" data-del-activity="${a.id}" aria-label="Delete activity entry" style="padding:2px 8px; font-size:12px; align-self:flex-start;">?</button>
         </div>`).join('')
         : '<span class="muted" style="font-size:12.5px;">Nothing logged yet.</span>';
       activityList.querySelectorAll('[data-del-activity]').forEach((b) => {
@@ -3194,7 +3247,7 @@ function wireSearch(containerSelector) {
         container.appendChild(msg);
       }
     } else {
-      // No query — collapse back to limited (shows first 3 via CSS)
+      // No query � collapse back to limited (shows first 3 via CSS)
       container.classList.add('limited');
     }
   });
@@ -3328,7 +3381,7 @@ async function settingsView() {
       });
       document.getElementById('totpConfirmForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const restore = setBtnLoading(e.currentTarget.querySelector('button[type=submit]'), 'Activating…');
+        const restore = setBtnLoading(e.currentTarget.querySelector('button[type=submit]'), 'Activating�');
         try {
           await api.post('/api/auth/totp/confirm', { token: document.getElementById('totpConfirmCode').value.trim() });
           state.user.twoFactorEnabled = true;
@@ -3342,14 +3395,14 @@ async function settingsView() {
       });
     } else {
       totpBody.innerHTML = `
-        <p style="font-size:13px; color:var(--success, #3fa66a); font-weight:600; margin:0 0 6px 0;">Active — a code is required at sign-in.</p>
+        <p style="font-size:13px; color:var(--success, #3fa66a); font-weight:600; margin:0 0 6px 0;">Active � a code is required at sign-in.</p>
         <form class="form" id="totpDisableForm">
           <input type="password" id="totpDisablePw" placeholder="Current password" autocomplete="current-password" required>
           <button class="btn danger" type="submit" style="margin-top:6px; display:block;">Disable two-factor</button>
         </form>`;
       document.getElementById('totpDisableForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const restore = setBtnLoading(e.currentTarget.querySelector('button[type=submit]'), 'Disabling…');
+        const restore = setBtnLoading(e.currentTarget.querySelector('button[type=submit]'), 'Disabling�');
         try {
           await api.post('/api/auth/totp/disable', { currentPassword: document.getElementById('totpDisablePw').value });
           state.user.twoFactorEnabled = false;
@@ -3367,7 +3420,7 @@ async function settingsView() {
   document.querySelector('#detailsForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const restore = setBtnLoading(e.submitter, 'Updating…');
+    const restore = setBtnLoading(e.submitter, 'Updating�');
     try {
       const data = await api.put('/api/auth/details', Object.fromEntries(new FormData(form)));
       setAuth(data.token, data.user);
@@ -3387,7 +3440,7 @@ async function settingsView() {
   document.querySelector('#passwordForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const restore = setBtnLoading(e.submitter, 'Changing…');
+    const restore = setBtnLoading(e.submitter, 'Changing�');
     try {
       await api.post('/api/auth/update-password', Object.fromEntries(new FormData(form)));
       showToast('Password changed successfully.');
@@ -3406,7 +3459,7 @@ async function settingsView() {
   document.querySelector('#prefsForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const restore = setBtnLoading(e.submitter, 'Saving…');
+    const restore = setBtnLoading(e.submitter, 'Saving�');
     try {
       const template = new FormData(form).get('defaultTemplate');
       const digestOptIn = document.getElementById('digestOptIn').checked;
@@ -3458,13 +3511,19 @@ async function settingsView() {
       const close = () => {
         overlay.style.opacity = '0';
         setTimeout(() => overlay.remove(), 200);
+        document.removeEventListener('keydown', escHandler, true);
       };
+
+      // Esc dismisses; focus lands on the destructive action's safe sibling.
+      const escHandler = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+      document.addEventListener('keydown', escHandler, true);
+      overlay.querySelector('#cancelDeleteBtn').focus();
 
       overlay.querySelector('#cancelDeleteBtn').addEventListener('click', close);
       
       const confirmBtn = overlay.querySelector('#confirmDeleteBtn');
       confirmBtn.addEventListener('click', async () => {
-        const restore = setBtnLoading(confirmBtn, 'Deleting…');
+        const restore = setBtnLoading(confirmBtn, 'Deleting�');
         // disable cancel button so user can't abort mid-flight
         overlay.querySelector('#cancelDeleteBtn').disabled = true;
         try {
@@ -3547,7 +3606,7 @@ async function xrayView() {
 
     // The structural checks an ATS parser cares about. Each maps to the risk
     // label(s) that would fail it, so the verdict is derived from the real
-    // analysis — a clean scan shows every check ticked, a risky one shows why.
+    // analysis � a clean scan shows every check ticked, a risky one shows why.
     const CHECK_DEFS = [
       { label: 'Text is machine-readable', fails: ['Scanned or image-based PDF (little or no selectable text)', 'Unreadable PDF'] },
       { label: 'Single-column reading order', fails: ['Complex Multi-Column Layout'] },
@@ -3575,7 +3634,7 @@ async function xrayView() {
     const verdictClass = allClear ? 'xray-verdict--pass' : 'xray-verdict--warn';
     const verdictMark = allClear ? markPass : markWarn;
     const verdictTitle = allClear
-      ? 'Clean parse — your CV is ATS-ready'
+      ? 'Clean parse � your CV is ATS-ready'
       : `${risks.length} structural risk${risks.length > 1 ? 's' : ''} to review`;
     const verdictSub = allClear
       ? 'Every line was extracted in a single, logical order. An applicant tracking system will read this document exactly the way you laid it out.'
@@ -3612,7 +3671,7 @@ async function xrayView() {
     // Render the PDF with the browser's native viewer by pointing an <iframe>
     // straight at the endpoint. An iframe cannot set Authorization headers, so
     // we first exchange our session for a 60s single-purpose ticket scoped to
-    // this one document — the long-lived session JWT never touches a URL.
+    // this one document � the long-lived session JWT never touches a URL.
     const container = document.getElementById('pdfContainer');
     container.innerHTML = '';
     try {
