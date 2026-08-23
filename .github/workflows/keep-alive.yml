@@ -6,6 +6,14 @@ on:
     - cron: '0 0 */2 * *'
   workflow_dispatch: # Allows manual triggering from the GitHub Actions UI
 
+# Secrets are hoisted to workflow-level env so the per-step `if` guards can
+# read them: step-level `env:` is applied AFTER the `if` is evaluated, so
+# referencing secrets there silently disabled every step of this workflow.
+env:
+  RENDER_URL: ${{ secrets.RENDER_APP_URL }}
+  SUPABASE_URL: ${{ secrets.SUPABASE_PROJECT_URL }}
+  SUPABASE_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+
 jobs:
   keep-alive:
     name: Ping Services
@@ -13,21 +21,16 @@ jobs:
     steps:
       - name: Ping Render Web Service
         if: env.RENDER_URL != ''
-        env:
-          RENDER_URL: ${{ secrets.RENDER_APP_URL }}
         run: |
           echo "Pinging Render App..."
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${RENDER_URL%/}/api/health" || true)
+          STATUS=$(curl -sS -o /dev/null -w "%{http_code}" "${RENDER_URL%/}/api/health" || true)
           echo "Render health check response code: $STATUS"
 
       - name: Ping Supabase REST API
         if: env.SUPABASE_URL != ''
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_PROJECT_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           echo "Pinging Supabase..."
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+          STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
             -H "apikey: $SUPABASE_KEY" \
             -H "Authorization: Bearer $SUPABASE_KEY" \
             "${SUPABASE_URL%/}/rest/v1/" || true)
