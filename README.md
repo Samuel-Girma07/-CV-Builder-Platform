@@ -51,7 +51,8 @@ cv-builder-platform/
 │   ├── authController.js
 │   └── profileController.js
 ├── database/
-│   └── schema.sql
+│   ├── bootstrap.sql
+│   └── migrations/
 ├── docs/
 │   ├── API.md
 │   └── ER_DIAGRAM.md
@@ -116,8 +117,12 @@ The app requires `DATABASE_URL`, `JWT_SECRET`, and `NVIDIA_API_KEY` at startup.
 4. Create the PostgreSQL database tables:
 
 ```bash
-psql -U your_user -d cv_builder -f database/schema.sql
+psql -U your_user -d cv_builder -f database/bootstrap.sql
 ```
+
+`bootstrap.sql` is idempotent and consolidates the base schema plus all
+feature migrations — it is safe to run more than once. The numbered files
+in `database/migrations/` are kept for historical reference only.
 
 5. Start the application:
 
@@ -163,7 +168,7 @@ and response shapes are documented in [docs/API.md](docs/API.md).
 
 ## Database Schema
 
-The DDL script is in [database/schema.sql](database/schema.sql).
+The bootstrap/DDL script is in [database/bootstrap.sql](database/bootstrap.sql).
 
 The ER diagram is in [docs/ER_DIAGRAM.md](docs/ER_DIAGRAM.md).
 
