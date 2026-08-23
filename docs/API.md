@@ -173,3 +173,72 @@ and `filter_job_title` / `filter_company` / `filter_status`.
 
 - `DELETE /xray/:id`
   - Permanently removes a stored scan (owner-scoped).
+
+## Insights
+
+- `GET /insights/skill-gaps`
+  - Ranked missing skills across all scored applications:
+    `{ gaps: [{ skill, total, recentCount, priorCount, trend }], sampleOk }`.
+    `trend` compares the trailing 30 days with the prior 30; `sampleOk` is
+    false below three total mentions (the UI shows a hint instead).
+
+- `GET /insights/outcomes`
+  - Interview-reach split by feature usage:
+    `{ total, insights: [{ feature, sampleOk, withRate?, withoutRate?, uplift? }] }`.
+    Groups under four rows report `sampleOk: false` rather than fake uplift.
+
+## Profile versions
+
+- `GET /profile/versions` — metadata list, newest first (50 kept per user).
+- `GET /profile/versions/:versionId` — full snapshot payload.
+- `POST /profile/versions/:versionId/restore` — rolls the profile back and
+  records a `restore` snapshot in the same transaction.
+
+## Streaming cover letters
+
+1. `POST /applications/:id/cover-letter/stream-ticket` → `{ ticket, expiresIn: 60 }`.
+2. `GET /applications/:id/cover-letter/stream?ticket=…&tone=…` responds with
+   Server-Sent Events:
+   - `start` `{ tone }`
+   - `delta` `{ t }` (repeat)
+   - `reset` `{}` — partial output discarded, generation restarts on fallback model
+   - `done` `{ application }` or `error` `{ message }`
+
+## Mock interviews
+
+- `POST /mock-interviews/:appId/start` — body `{ mode?: behavioral|technical|mixed }`.
+  Resumes an active session when one exists. Generates flashcards via AI if absent.
+- `POST /mock-interviews/session/:sessionId/answer` — body `{ text }`. Returns
+  `{ finished, candidateMessage, coachMessage, session }`; the candidate message
+  carries `critique: { rating, strengths[], improvements[], sample_answer }`.
+- `GET /mock-interviews/session/:sessionId` / `GET /mock-interviews/:appId`.
+
+## Reminders & digest
+
+- `POST /applications/:id/reminders` — body `{ remindAt (ISO), message? }`.
+  Schedules a delayed pg-boss job that emails the owner.
+- `GET /applications/:id/reminders`, `POST /reminders/:id/dismiss`.
+- Weekly digest: cron-driven fan-out to users with `digest_opt_in = true`;
+  toggle via `POST /auth/digest-preference` body `{ digestOptIn }`.
+
+## Contacts & activities
+
+- `GET|POST /applications/:id/contacts` — name required (255); role/email/phone/notes optional.
+- `DELETE /applications/:id/contacts/:entryId`.
+- `GET|POST /applications/:id/activities` — `kind` ∈ note|call|email|interview|offer|rejection,
+  optional `occurredAt`; enforced by a database CHECK constraint.
+- `DELETE /applications/:id/activities/:entryId`.
+
+## Two-factor authentication (TOTP)
+
+1. `POST /auth/totp/enroll` → `{ otpauthUrl, qrDataUrl }` (seed stored encrypted, disabled).
+2. `POST /auth/totp/confirm` body `{ token }` — verifies possession, activates.
+3. Login becomes two-step: first call returns `{ twoFactorRequired: true }` with **no token**;
+   re-post credentials plus `{ token }` to receive the JWT. Wrong codes are 401.
+4. `POST /auth/totp/disable` requires the current password.
+
+## Account export
+
+- `GET /auth/export` — JSON attachment of every owned record (user sans
+  credentials, profile + versions, applications + history, interviews,
+  reminders, contacts, activities, X-Ray metadata). Rate limited like auth.
