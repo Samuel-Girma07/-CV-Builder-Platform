@@ -92,6 +92,15 @@ CREATE TABLE IF NOT EXISTS cv_versions (
   uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS profile_versions (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  parsed_json_data JSONB NOT NULL,
+  trigger VARCHAR(30) NOT NULL DEFAULT 'manual_save',
+  restored_from INTEGER,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ------------------------------------------------------------
 -- 3. Legacy-database reconciliation
 --    No-ops on fresh installs; repairs databases created from
@@ -150,3 +159,6 @@ CREATE INDEX IF NOT EXISTS idx_interviews_user ON interviews(user_id);
 CREATE INDEX IF NOT EXISTS idx_interviews_app ON interviews(application_id);
 
 CREATE INDEX IF NOT EXISTS idx_cv_versions_user ON cv_versions(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_profile_versions_user
+  ON profile_versions(user_id, created_at DESC);

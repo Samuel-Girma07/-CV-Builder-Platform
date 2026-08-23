@@ -1,5 +1,7 @@
 const pdfParse = require('pdf-parse');
+const pool = require('../config/db');
 const profileQuery = require('../models/profileQuery');
+const profileVersionQuery = require('../models/profileVersionQuery');
 const { streamCvPdf, TEMPLATES } = require('../services/cvPdf');
 const { callAi } = require('../services/aiClient');
 const { createCvUpload, isPdfBuffer } = require('../config/upload');
@@ -95,8 +97,16 @@ const profileController = {
   async saveProfile(req, res, next) {
     try {
       const profileData = normalizeProfile(req.body);
-      const saved = await profileQuery.upsert(req.user.id, profileData);
-      return res.json({ profile: saved.parsed_json_data });
+      // Snapshot + write commit together so history can never claim a state
+      // the profile never actually had.
+      await pool.withTransaction(async (tx) => {
+        const saved = await profileQuery.upsert(req.user.id, profileData, tx);
+        await profileVersionQuery.createSnapshot(tx, req.user.id, saved.parsed_json_data, 'manual_save');
+        await profileVersionQuery.prune(tx, req.user.id);
+        return saved;
+      });
+      const latest = await profileQuery.findByUserId(req.user.id);
+      return res.json({ profile: latest.parsed_json_data });
     } catch (err) {
       return next(err);
     }
@@ -141,7 +151,12 @@ const profileController = {
       } catch (parseErr) {
         return res.status(502).json({ error: 'AI failed to extract structured data from the PDF. Please ensure the PDF is a valid text-based CV.' });
       }
-      const saved = await profileQuery.upsert(req.user.id, normalizeProfile(parsedData));
+      const saved = await pool.withTransaction(async (tx) => {
+        const saved = await profileQuery.upsert(req.user.id, normalizeProfile(parsedData), tx);
+        await profileVersionQuery.createSnapshot(tx, req.user.id, saved.parsed_json_data, 'ai_parse');
+        await profileVersionQuery.prune(tx, req.user.id);
+        return saved;
+      });
 
       return res.json({ profile: saved.parsed_json_data });
     } catch (err) {
@@ -177,7 +192,12 @@ const profileController = {
           summary,
         },
       };
-      const saved = await profileQuery.upsert(req.user.id, updated);
+      const saved = await pool.withTransaction(async (tx) => {
+        const saved = await profileQuery.upsert(req.user.id, updated, tx);
+        await profileVersionQuery.createSnapshot(tx, req.user.id, saved.parsed_json_data, 'ai_summary');
+        await profileVersionQuery.prune(tx, req.user.id);
+        return saved;
+      });
 
       return res.json({ summary, profile: saved.parsed_json_data });
     } catch (err) {
@@ -229,6 +249,57 @@ const profileController = {
       const { lintCvText } = require('../utils/cvLinter');
       const issues = lintCvText(text || '');
       return res.json({ issues });
+    } catch (err) {
+      return next(err);
+    }
+  },
+
+  async getVersions(req, res, next) {
+    try {
+      const versions = await profileVersionQuery.listByUser(req.user.id);
+      return res.json({ versions });
+    } catch (err) {
+      return next(err);
+    }
+  },
+
+  async getVersion(req, res, next) {
+    try {
+      const versionId = Number(req.params.versionId);
+      if (!Number.isInteger(versionId) || versionId <= 0) {
+        return res.status(400).json({ error: 'Invalid version ID.' });
+      }
+      const version = await profileVersionQuery.findById(versionId, req.user.id);
+      if (!version) {
+        return res.status(404).json({ error: 'Profile version not found.' });
+      }
+      return res.json({ version });
+    } catch (err) {
+      return next(err);
+    }
+  },
+
+  async restoreVersion(req, res, next) {
+    try {
+      const versionId = Number(req.params.versionId);
+      if (!Number.isInteger(versionId) || versionId <= 0) {
+        return res.status(400).json({ error: 'Invalid version ID.' });
+      }
+
+      const version = await profileVersionQuery.findById(versionId, req.user.id);
+      if (!version || !version.parsed_json_data) {
+        return res.status(404).json({ error: 'Profile version not found.' });
+      }
+
+      // Restoring is itself a history event: the pre-restore state stays in
+      // the timeline and a new 'restore' snapshot marks the rollback.
+      await pool.withTransaction(async (tx) => {
+        await profileQuery.upsert(req.user.id, version.parsed_json_data, tx);
+        await profileVersionQuery.createSnapshot(tx, req.user.id, version.parsed_json_data, 'restore', version.id);
+        await profileVersionQuery.prune(tx, req.user.id);
+      });
+
+      return res.json({ profile: version.parsed_json_data, message: 'Profile restored.' });
     } catch (err) {
       return next(err);
     }

@@ -1244,6 +1244,27 @@ function isProfileEmpty(profile) {
   return !hasSkills && !hasExp;
 }
 
+/* Human-readable, section-count diff between two CV profiles. Used by the
+   restore confirm so users see what will change without a full JSON dump. */
+function describeProfileDiff(current, snapshot) {
+  if (!snapshot) return '';
+  const count = (arr) => (Array.isArray(arr) ? arr.length : 0);
+  const parts = [];
+  const pairs = [
+    ['skills', (p) => count(p && p.skills)],
+    ['experience', (p) => count(p && p.experience)],
+    ['education', (p) => count(p && p.education)],
+    ['projects', (p) => count(p && p.projects)],
+    ['certifications', (p) => count(p && p.certifications)],
+  ];
+  for (const [label, get] of pairs) {
+    const a = get(current);
+    const b = get(snapshot);
+    if (a !== b) parts.push(`${label} ${a}→${b}`);
+  }
+  return parts.join(', ');
+}
+
 function promptProfileCompletion() {
   showModal({
     title: 'Profile Incomplete',
@@ -1914,6 +1935,7 @@ async function profileView() {
         <hr>
         <h3>Current skills</h3>
         <div class="tag-list">${skills.map((skill) => `<span class="tag">${escapeHtml(skill)}</span>`).join('') || '<span class="muted">No skills saved yet.</span>'}</div>
+        <div id="versionHistoryWrap" style="margin-top: 18px;"></div>
       </section>
     </div>`);
 
@@ -2053,9 +2075,67 @@ async function profileView() {
     }
   });
 
+  // Profile version history (diff-lite restore)
+  const TRIGGER_LABELS = {
+    manual_save: 'Manual save',
+    ai_parse: 'CV upload',
+    ai_summary: 'AI summary',
+    restore: 'Restored',
+  };
+  const versionWrap = document.getElementById('versionHistoryWrap');
+  if (versionWrap) {
+    api.get('/api/profile/versions').then(({ versions }) => {
+      if (!versions.length) {
+        versionWrap.innerHTML = '<h3>Version history</h3><span class="muted" style="font-size:13px;">Snapshots appear here each time your profile is saved.</span>';
+        return;
+      }
+      versionWrap.innerHTML = `
+        <h3>Version history</h3>
+        <div class="section-list">
+          ${versions.map((v) => `
+            <div class="section-item" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+              <div style="min-width:0;">
+                <div style="font-size:13px; font-weight:500;">${escapeHtml(TRIGGER_LABELS[v.trigger] || v.trigger)}${v.restored_from ? ` · from #${v.restored_from}` : ''}</div>
+                <div class="muted" style="font-size:12px;">${new Date(v.created_at).toLocaleString()}</div>
+              </div>
+              <button class="btn ghost" data-version-id="${v.id}" style="flex-shrink:0; padding:4px 10px; font-size:12px;">Restore</button>
+            </div>`).join('')}
+        </div>`;
+
+      versionWrap.querySelectorAll('[data-version-id]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const id = btn.dataset.versionId;
+          try {
+            const { version } = await api.get(`/api/profile/versions/${id}`);
+            const diff = describeProfileDiff(state.profile, version.parsed_json_data);
+            showModal({
+              title: 'Restore this version?',
+              content: `Snapshot from ${new Date(version.created_at).toLocaleString()} (${TRIGGER_LABELS[version.trigger] || version.trigger}). Changes vs current: ${diff || 'no section differences detected'}.`,
+              actions: [
+                { label: 'Cancel', onClick: () => {} },
+                { label: 'Restore', primary: true, onClick: async () => {
+                  try {
+                    await api.post(`/api/profile/versions/${id}/restore`);
+                    showToast('Profile restored.');
+                    await profileView();
+                  } catch (err) {
+                    showToast(err.message, 'error');
+                  }
+                }},
+              ],
+            });
+          } catch (err) {
+            showToast(err.message, 'error');
+          }
+        });
+      });
+    }).catch(() => {
+      versionWrap.innerHTML = '';
+    });
+  }
+
   // Feature 6: Linter overlay sync
-  const expEl = document.querySelector('#experience');
-  const overlayEl = document.querySelector('#experienceLintOverlay');
+  const expEl = document.querySelector('#experience');  const overlayEl = document.querySelector('#experienceLintOverlay');
   
   if (expEl && overlayEl) {
     let lintTimer = null;

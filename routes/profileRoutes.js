@@ -13,6 +13,9 @@ router.post('/upload', aiLimiter, profileController.upload.single('cvFile'), pro
 router.post('/summary', aiLimiter, profileController.generateSummary);
 router.post('/lint', profileController.lintProfile);
 router.put('/skill-levels', profileController.saveSkillLevels);
+router.get('/versions', profileController.getVersions);
+router.get('/versions/:versionId', profileController.getVersion);
+router.post('/versions/:versionId/restore', profileController.restoreVersion);
 router.get('/cv.pdf', profileController.getCvPdf);
 
 module.exports = router;
