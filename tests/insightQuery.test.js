@@ -55,3 +55,37 @@ describe('skill-gap radar query', () => {
     expect(gap.recentCount).toBe(0);
   });
 });
+
+describe('outcome split query', () => {
+  test('joins status history once per application with feature flags computed in SQL', async () => {
+    pool.query.mockResolvedValueOnce({ rows: [{ total: 10 }] });
+
+    const split = await insightQuery.getOutcomeSplit(4);
+
+    expect(pool.query).toHaveBeenCalledTimes(1);
+    const [sql, params] = pool.query.mock.calls[0];
+    expect(params).toEqual([4]);
+    expect(sql).toMatch(/application_status_history/);
+    expect(sql).toMatch(/tailored_cv_profile IS NOT NULL/);
+    expect(sql).toMatch(/deleted_at IS NULL/);
+    expect(split.total).toBe(10);
+  });
+
+  test('an empty result row still yields a fully numeric object', async () => {
+    pool.query.mockResolvedValueOnce({ rows: [] });
+
+    const split = await insightQuery.getOutcomeSplit(4);
+
+    expect(split).toEqual({
+      total: 0,
+      tailoredTotal: 0,
+      tailoredInterviewed: 0,
+      plainTotal: 0,
+      plainInterviewed: 0,
+      letterTotal: 0,
+      letterInterviewed: 0,
+      noLetterTotal: 0,
+      noLetterInterviewed: 0,
+    });
+  });
+});

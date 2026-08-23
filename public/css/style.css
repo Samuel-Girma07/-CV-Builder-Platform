@@ -956,6 +956,51 @@ hr {
   background: var(--accent);
 }
 
+/* What's working outcome rows */
+.outcome-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.outcome-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.outcome-name {
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+.outcome-nums {
+  font-size: 12.5px;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.outcome-uplift {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--success, #3fa66a) 18%, transparent);
+  color: var(--success, #3fa66a);
+  font-weight: 600;
+}
+
+.outcome-uplift.negative {
+  background: color-mix(in srgb, var(--danger, #d05656) 16%, transparent);
+  color: var(--danger, #d05656);
+}
+
 /* Right column summary rows (Cash / Investment / Crypto analogues) */
 .summary {
   display: flex;
