@@ -26,7 +26,7 @@ const analyticsQuery = {
          COUNT(DISTINCT CASE WHEN h.status = 'Offered/Hired' THEN a.id END) as offered_count
        FROM applications a
        LEFT JOIN application_status_history h ON a.id = h.application_id
-       WHERE a.user_id = $1
+       WHERE a.user_id = $1 AND a.deleted_at IS NULL
        ${groupByClause}`,
       [userId]
     );

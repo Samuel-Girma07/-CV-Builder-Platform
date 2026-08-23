@@ -4,8 +4,12 @@ const pool = require('../config/db');
 const SORTABLE_COLUMNS = ['job_title', 'company', 'ats_match_score', 'created_at', 'status'];
 const FILTERABLE_COLUMNS = ['job_title', 'company', 'status'];
 const UPDATABLE_FIELDS = ['job_title', 'company', 'job_description', 'status', 'custom_fields', 'generated_cover_letter'];
+// Must stay in sync with the applications_status_allowed CHECK constraint.
+const STATUS_VALUES = ['Applied', 'Interviewing', 'Offered/Hired', 'Rejected'];
 
 const applicationQuery = {
+  STATUS_VALUES,
+
   /**
    * Create a new application row with job details.
    */
@@ -35,15 +39,15 @@ const applicationQuery = {
   },
 
   /**
-   * Update ATS score and missing skills for an application.
+   * Update ATS score and missing skills for an application (owner-scoped).
    */
-  async updateAtsScore(applicationId, atsMatchScore, missingSkills) {
+  async updateAtsScore(applicationId, userId, atsMatchScore, missingSkills) {
     const result = await pool.query(
       `UPDATE applications
-       SET ats_match_score = $2, missing_skills = $3
-       WHERE id = $1
+       SET ats_match_score = $3, missing_skills = $4
+       WHERE id = $1 AND user_id = $2
        RETURNING *`,
-      [applicationId, atsMatchScore, JSON.stringify(missingSkills)]
+      [applicationId, userId, atsMatchScore, JSON.stringify(missingSkills)]
     );
     return result.rows[0];
   },
@@ -93,11 +97,12 @@ const applicationQuery = {
 
   /**
    * Get all applications for a user, ordered by newest first.
+   * Soft-deleted rows are excluded everywhere via `deleted_at IS NULL`.
    */
   async findAllByUserId(userId) {
     const result = await pool.query(
       `SELECT * FROM applications
-       WHERE user_id = $1
+       WHERE user_id = $1 AND deleted_at IS NULL
        ORDER BY created_at DESC`,
       [userId]
     );
@@ -110,7 +115,7 @@ const applicationQuery = {
   async findById(applicationId, userId) {
     const result = await pool.query(
       `SELECT * FROM applications
-       WHERE id = $1 AND user_id = $2`,
+       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
       [applicationId, userId]
     );
     return result.rows[0] || null;
@@ -125,19 +130,21 @@ const applicationQuery = {
          COUNT(*)::int AS total_applications,
          COALESCE(ROUND(AVG(ats_match_score)), 0)::int AS avg_ats_score
        FROM applications
-       WHERE user_id = $1`,
+       WHERE user_id = $1 AND deleted_at IS NULL`,
       [userId]
     );
     return result.rows[0];
   },
 
   /**
-   * Delete an application by ID (scoped to user).
+   * Soft-delete an application by ID (scoped to user). The row stays
+   * recoverable until a future purge job removes old trash permanently.
    */
   async delete(applicationId, userId) {
     const result = await pool.query(
-      `DELETE FROM applications
-       WHERE id = $1 AND user_id = $2
+      `UPDATE applications
+       SET deleted_at = NOW()
+       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
        RETURNING id`,
       [applicationId, userId]
     );
@@ -150,7 +157,7 @@ const applicationQuery = {
    */
   async findAllSorted(userId, { sort, order, filters } = {}) {
     const params = [userId];
-    let where = 'WHERE user_id = $1';
+    let where = 'WHERE user_id = $1 AND deleted_at IS NULL';
 
     /* Apply column filters */
     if (filters && typeof filters === 'object') {
@@ -178,6 +185,8 @@ const applicationQuery = {
 
   /**
    * Partial update — only touches fields on the UPDATABLE allowlist.
+   * Status values are validated against the canonical set; soft-deleted
+   * rows are never updatable.
    */
   async updatePartial(applicationId, userId, payload) {
     const setClauses = [];
@@ -185,6 +194,7 @@ const applicationQuery = {
 
     for (const [key, value] of Object.entries(payload)) {
       if (!UPDATABLE_FIELDS.includes(key)) continue;
+      if (key === 'status' && !STATUS_VALUES.includes(value)) continue;
       params.push(key === 'custom_fields' ? JSON.stringify(value) : value);
       if (key === 'custom_fields') {
         setClauses.push(`custom_fields = custom_fields || $${params.length}::jsonb`);
@@ -200,7 +210,7 @@ const applicationQuery = {
       await client.query('BEGIN');
       const result = await client.query(
         `UPDATE applications SET ${setClauses.join(', ')}
-         WHERE id = $1 AND user_id = $2
+         WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
          RETURNING *`,
         params
       );
@@ -223,16 +233,16 @@ const applicationQuery = {
   },
 
   /**
-   * Bulk status update.
+   * Bulk status update (owner-scoped, active rows only).
    */
   async bulkUpdateStatus(userId, ids, status) {
-    if (!ids.length) return [];
+    if (!ids.length || !STATUS_VALUES.includes(status)) return [];
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       const result = await client.query(
         `UPDATE applications SET status = $3
-         WHERE user_id = $1 AND id = ANY($2::int[])
+         WHERE user_id = $1 AND id = ANY($2::int[]) AND deleted_at IS NULL
          RETURNING *`,
         [userId, ids, status]
       );
@@ -257,13 +267,29 @@ const applicationQuery = {
   },
 
   /**
-   * Bulk delete.
+   * Bulk soft-delete: rows move to trash and remain restorable.
    */
   async bulkDelete(userId, ids) {
     if (!ids.length) return [];
     const result = await pool.query(
-      `DELETE FROM applications
-       WHERE user_id = $1 AND id = ANY($2::int[])
+      `UPDATE applications
+       SET deleted_at = NOW()
+       WHERE user_id = $1 AND id = ANY($2::int[]) AND deleted_at IS NULL
+       RETURNING id`,
+      [userId, ids]
+    );
+    return result.rows;
+  },
+
+  /**
+   * Restore previously soft-deleted applications (undo trash).
+   */
+  async bulkRestore(userId, ids) {
+    if (!ids.length) return [];
+    const result = await pool.query(
+      `UPDATE applications
+       SET deleted_at = NULL
+       WHERE user_id = $1 AND id = ANY($2::int[]) AND deleted_at IS NOT NULL
        RETURNING id`,
       [userId, ids]
     );

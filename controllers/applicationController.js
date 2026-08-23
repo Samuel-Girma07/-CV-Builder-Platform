@@ -1,73 +1,10 @@
-const OpenAI = require('openai');
 const applicationQuery = require('../models/applicationQuery');
 const profileQuery = require('../models/profileQuery');
 const userTablePreferenceQuery = require('../models/userTablePreferenceQuery');
 const { streamCoverLetterPdf } = require('../services/coverLetterPdf');
 const { streamCvPdf } = require('../services/cvPdf');
-
-// Primary: llama-3.3-70b — best-in-class JSON reliability on NVIDIA NIM.
-// Fallback: mistral-nemo — 12B, ultra-fast, near-zero cold-start.
-const PRIMARY_MODEL = process.env.NVIDIA_MODEL || 'meta/llama-3.1-70b-instruct';
-const FALLBACK_MODEL = 'meta/llama-3.1-8b-instruct';
-const PRIMARY_TIMEOUT_MS = 15000; // 15s — enough for a warm primary model
-const SERVER_ABORT_MS = 90000;    // 90s — hard ceiling for any single AI call
-
-const nvidiaClient = new OpenAI({
-  apiKey: process.env.NVIDIA_API_KEY,
-  baseURL: process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',
-});
-
-async function callAiWithFallback(params) {
-  const { logger } = require('../middlewares/logger');
-
-  // ── Primary attempt ────────────────────────────────────────────
-  const primaryController = new AbortController();
-  const primaryHardStop = setTimeout(() => primaryController.abort(), SERVER_ABORT_MS);
-
-  try {
-    logger.info(`AI call: primary model ${PRIMARY_MODEL}`);
-    const result = await Promise.race([
-      nvidiaClient.chat.completions.create(
-        { ...params, model: PRIMARY_MODEL },
-        { signal: primaryController.signal }
-      ),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('primary_timeout')), PRIMARY_TIMEOUT_MS)
-      ),
-    ]);
-    clearTimeout(primaryHardStop);
-    logger.info(`AI call: primary model succeeded`);
-    return result;
-  } catch (err) {
-    clearTimeout(primaryHardStop);
-    primaryController.abort();
-    if (err.message !== 'primary_timeout') {
-      logger.warn(`AI call: primary model error (${err.message}). Trying fallback.`);
-    } else {
-      logger.warn(`AI call: primary model timed out after ${PRIMARY_TIMEOUT_MS}ms. Trying fallback.`);
-    }
-  }
-
-  // ── Fallback attempt ───────────────────────────────────────────
-  const fallbackController = new AbortController();
-  const fallbackHardStop = setTimeout(() => fallbackController.abort(), SERVER_ABORT_MS);
-
-  try {
-    logger.info(`AI call: fallback model ${FALLBACK_MODEL}`);
-    const result = await nvidiaClient.chat.completions.create(
-      { ...params, model: FALLBACK_MODEL },
-      { signal: fallbackController.signal }
-    );
-    clearTimeout(fallbackHardStop);
-    logger.info(`AI call: fallback model succeeded`);
-    return result;
-  } catch (err) {
-    clearTimeout(fallbackHardStop);
-    fallbackController.abort();
-    logger.error(`AI call: fallback model also failed (${err.message})`);
-    throw new Error('The AI service is currently unavailable. Please try again in a moment.');
-  }
-}
+const { callAi } = require('../services/aiClient');
+const { normalizeTailoredProfile, normalizePrepGuide } = require('../utils/schemas');
 
 const VALID_TONES = ['Formal', 'Confident', 'Concise'];
 const ATS_JSON_SCHEMA = `{
@@ -126,17 +63,24 @@ const applicationController = {
   },
 
   async create(req, res, next) {
+    let application = null;
     try {
       const { jobTitle, company, jobDescription, channel } = req.body;
 
       if (!jobTitle || !company || !jobDescription) {
         return res.status(400).json({ error: 'Job title, company, and job description are required.' });
       }
+      if (typeof jobTitle !== 'string' || typeof company !== 'string' || typeof jobDescription !== 'string') {
+        return res.status(400).json({ error: 'Job title, company, and job description must be text.' });
+      }
+      if (jobTitle.trim().length > 255 || company.trim().length > 255) {
+        return res.status(400).json({ error: 'Job title and company must be 255 characters or fewer.' });
+      }
 
       const { evaluateJobDescription } = require('../utils/redFlagRules');
       const redFlagResult = evaluateJobDescription(jobDescription);
 
-      const application = await applicationQuery.create(
+      application = await applicationQuery.create(
         req.user.id,
         jobTitle.trim(),
         company.trim(),
@@ -149,7 +93,7 @@ const applicationController = {
       const profile = await profileQuery.findByUserId(req.user.id);
       const profileData = profile && profile.parsed_json_data ? profile.parsed_json_data : {};
 
-      const response = await callAiWithFallback({
+      const response = await callAi({
         messages: [
           {
             role: 'system',
@@ -169,7 +113,9 @@ const applicationController = {
       try {
         parsed = JSON.parse(response.choices[0].message.content);
       } catch (parseErr) {
-        throw new Error('AI returned invalid JSON.');
+        const e = new Error('The AI service returned an unreadable score. Please try again.');
+        e.status = 502;
+        throw e;
       }
       const rawScore = Number(parsed.ats_match_score);
       const atsScore = Number.isFinite(rawScore)
@@ -179,9 +125,15 @@ const applicationController = {
         ? parsed.missing_skills.filter((skill) => typeof skill === 'string' && skill.trim()).slice(0, 10)
         : [];
 
-      const updated = await applicationQuery.updateAtsScore(application.id, atsScore, missingSkills);
+      const updated = await applicationQuery.updateAtsScore(application.id, req.user.id, atsScore, missingSkills);
       return res.status(201).json({ application: updated });
     } catch (err) {
+      // Compensating delete: the scoring pipeline failed mid-flight, so the
+      // row created in THIS request is removed instead of lingering as a
+      // confusing 0%-scored orphan the user never asked to keep.
+      if (application && !res.headersSent) {
+        await applicationQuery.delete(application.id, req.user.id).catch(() => {});
+      }
       return next(err);
     }
   },
@@ -204,7 +156,7 @@ const applicationController = {
       let userPrompt = `CANDIDATE CV DATA:\n${JSON.stringify(profileData)}\n\n<job_title>\n${application.job_title}\n</job_title>\n\n<company>\n${application.company}\n</company>\n\n<job_description>\n${application.job_description || ''}\n</job_description>`;
 
 
-      const response = await callAiWithFallback({
+      const response = await callAi({
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
@@ -275,7 +227,24 @@ const applicationController = {
       const id = validateId(req.params.id);
       if (!id) return res.status(400).json({ error: 'Invalid application ID.' });
 
-      const updated = await applicationQuery.updatePartial(id, req.user.id, req.body);
+      const payload = req.body || {};
+      if (payload.status !== undefined && !applicationQuery.STATUS_VALUES.includes(payload.status)) {
+        return res.status(400).json({
+          error: `Status must be one of: ${applicationQuery.STATUS_VALUES.join(', ')}.`,
+        });
+      }
+      for (const field of ['job_title', 'company']) {
+        if (payload[field] !== undefined) {
+          if (typeof payload[field] !== 'string') {
+            return res.status(400).json({ error: `${field} must be text.` });
+          }
+          if (payload[field].trim().length > 255) {
+            return res.status(400).json({ error: `${field} must be 255 characters or fewer.` });
+          }
+        }
+      }
+
+      const updated = await applicationQuery.updatePartial(id, req.user.id, payload);
       if (!updated) {
         return res.status(404).json({ error: 'Application not found or no valid fields to update.' });
       }
@@ -302,7 +271,17 @@ const applicationController = {
         return res.json({ deleted: deleted.map((r) => r.id) });
       }
 
+      if (operation === 'restore') {
+        const restored = await applicationQuery.bulkRestore(req.user.id, safeIds);
+        return res.json({ restored: restored.map((r) => r.id) });
+      }
+
       if (operation === 'status' && payload && payload.status) {
+        if (!applicationQuery.STATUS_VALUES.includes(payload.status)) {
+          return res.status(400).json({
+            error: `Status must be one of: ${applicationQuery.STATUS_VALUES.join(', ')}.`,
+          });
+        }
         const updated = await applicationQuery.bulkUpdateStatus(req.user.id, safeIds, payload.status);
         return res.json({ updated: updated.length });
       }
@@ -364,7 +343,7 @@ INSTRUCTIONS:
 3. You MAY rewrite the "summary" to specifically position the candidate for this exact role.
 4. Return ONLY valid JSON in the exact same schema structure as the input CV JSON. Return no markdown formatting, no backticks, and no explanations. JUST JSON.`;
 
-      const aiRes = await callAiWithFallback({
+      const aiRes = await callAi({
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.4,
         max_tokens: 3000,
@@ -372,15 +351,26 @@ INSTRUCTIONS:
 
       let tailoredJson = aiRes.choices[0].message.content.trim();
       if (tailoredJson.startsWith('```json')) tailoredJson = tailoredJson.replace(/^```json/, '').replace(/```$/, '').trim();
-      
+
       let tailoredData;
       try {
         tailoredData = JSON.parse(tailoredJson);
       } catch (parseErr) {
-        throw new Error('Failed to parse AI output as JSON.');
+        const e = new Error('The AI service returned an unreadable CV. Please try again.');
+        e.status = 502;
+        throw e;
       }
-      
-      const updatedApp = await applicationQuery.updateTailoredCvForUser(id, req.user.id, tailoredData);
+
+      // Never persist raw model output: it must fit the exact shape the PDF
+      // renderer and preview UI expect, or the request fails cleanly.
+      const normalized = normalizeTailoredProfile(tailoredData);
+      if (!normalized) {
+        const e = new Error('The AI service returned an unexpected CV structure. Please try again.');
+        e.status = 502;
+        throw e;
+      }
+
+      const updatedApp = await applicationQuery.updateTailoredCvForUser(id, req.user.id, normalized);
       return res.json({ application: updatedApp });
     } catch (err) {
       console.error('Tailor CV error:', err);
@@ -452,7 +442,7 @@ Return ONLY a JSON array of 5 objects matching this exact schema:
 ]
 No markdown, no backticks, JUST JSON.`;
 
-      const aiRes = await callAiWithFallback({
+      const aiRes = await callAi({
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.5,
         max_tokens: 2500,
@@ -460,15 +450,24 @@ No markdown, no backticks, JUST JSON.`;
 
       let guideJson = aiRes.choices[0].message.content.trim();
       if (guideJson.startsWith('```json')) guideJson = guideJson.replace(/^```json/, '').replace(/```$/, '').trim();
-      
+
       let guideData;
       try {
         guideData = JSON.parse(guideJson);
       } catch (parseErr) {
-        throw new Error('Failed to parse AI output as JSON.');
+        const e = new Error('The AI service returned an unreadable prep guide. Please try again.');
+        e.status = 502;
+        throw e;
       }
-      
-      const updatedApp = await applicationQuery.updateInterviewPrepForUser(id, req.user.id, guideData);
+
+      const normalizedGuide = normalizePrepGuide(guideData);
+      if (!normalizedGuide) {
+        const e = new Error('The AI service returned an unexpected prep-guide structure. Please try again.');
+        e.status = 502;
+        throw e;
+      }
+
+      const updatedApp = await applicationQuery.updateInterviewPrepForUser(id, req.user.id, normalizedGuide);
       return res.json({ application: updatedApp });
     } catch (err) {
       console.error('Interview Prep error:', err);

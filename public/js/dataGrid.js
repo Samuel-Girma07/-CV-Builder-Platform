@@ -6,7 +6,7 @@ let gridState = {
   filters: {},
   selectedIds: new Set(),
   editing: null, // { id, field }
-  undoBuffer: null,
+  lastDeleted: null, // { ids: [...], data: [...] } — restorable via bulk 'restore'
 };
 
 const DEFAULT_COLS = [
@@ -66,6 +66,15 @@ async function renderDataGrid() {
     ]);
     gridState.data = dataRes.applications;
     gridState.prefs = prefsRes.preferences || { column_order: [], hidden_columns: [], custom_column_defs: [] };
+    // Drop selections that no longer match visible rows so filters/sorts can
+    // never leave hidden rows silently selected for bulk actions.
+    const liveIds = new Set(gridState.data.map((r) => r.id));
+    gridState.selectedIds = new Set([...gridState.selectedIds].filter((id) => liveIds.has(id)));
+    if (gridState.lastDeleted) {
+      gridState.lastDeleted.ids = gridState.lastDeleted.ids.filter((id) => !liveIds.has(id));
+      gridState.lastDeleted.data = gridState.lastDeleted.data.filter((r) => !liveIds.has(r.id));
+      if (!gridState.lastDeleted.ids.length) gridState.lastDeleted = null;
+    }
     drawGrid();
   } catch (err) {
     showToast(err.message, 'error');
@@ -181,7 +190,7 @@ function drawGrid() {
           <button class="btn ghost" id="btnBulkDelete" style="color:red">Delete</button>
         </div>
       ` : ''}
-      ${gridState.undoBuffer ? `<button class="btn ghost" id="btnUndo">Undo Delete</button>` : ''}
+      ${gridState.lastDeleted ? `<button class="btn ghost" id="btnUndo">Undo</button>` : ''}
     </div>
   `;
 
@@ -376,47 +385,48 @@ function attachGridEvents() {
   if (btnBulkDelete) {
     btnBulkDelete.addEventListener('click', async () => {
       const idsToDelete = Array.from(gridState.selectedIds);
-      // Soft UI delete & Undo Toast
-      gridState.undoBuffer = {
-        ids: idsToDelete,
-        data: gridState.data.filter(r => idsToDelete.includes(r.id)),
-        timeout: setTimeout(async () => {
-          // Hard delete
-          try {
-            await api.patch('/api/applications/bulk', {
-              ids: gridState.undoBuffer.ids,
-              operation: 'delete'
-            });
-            gridState.undoBuffer = null;
-          } catch(err) {
-            // The rows are still on the server. Restore them in the UI so the
-            // grid matches reality, and tell the user the delete failed.
-            if (gridState.undoBuffer) {
-              gridState.data = [...gridState.undoBuffer.data, ...gridState.data];
-              gridState.undoBuffer = null;
-            }
-            showToast('Delete failed — applications were restored. ' + err.message, 'error');
-            drawGrid();
-          }
-        }, 5000)
-      };
-      gridState.data = gridState.data.filter(r => !idsToDelete.includes(r.id));
-      gridState.selectedIds.clear();
-      showToast('Applications deleted. You have 5 seconds to Undo.');
+      if (!idsToDelete.length) return;
+      btnBulkDelete.disabled = true;
+      try {
+        // Server-side soft delete: the rows move to trash immediately and stay
+        // restorable — no timers, so navigation or a closed tab can never
+        // desynchronize the UI from what actually happened on the server.
+        await api.patch('/api/applications/bulk', {
+          ids: idsToDelete,
+          operation: 'delete'
+        });
+        gridState.lastDeleted = {
+          ids: idsToDelete,
+          data: gridState.data.filter((r) => idsToDelete.includes(r.id)),
+        };
+        gridState.data = gridState.data.filter((r) => !idsToDelete.includes(r.id));
+        gridState.selectedIds.clear();
+        showToast('Applications moved to trash. You can undo.');
+      } catch (err) {
+        showToast('Delete failed. ' + err.message, 'error');
+      }
       drawGrid();
     });
   }
 
   const btnUndo = document.getElementById('btnUndo');
   if (btnUndo) {
-    btnUndo.addEventListener('click', () => {
-      if (gridState.undoBuffer) {
-        clearTimeout(gridState.undoBuffer.timeout);
-        gridState.data = [...gridState.undoBuffer.data, ...gridState.data];
-        gridState.undoBuffer = null;
+    btnUndo.addEventListener('click', async () => {
+      const restoreIds = [...(gridState.lastDeleted?.ids || [])];
+      if (!restoreIds.length || !gridState.lastDeleted) return;
+      btnUndo.disabled = true;
+      try {
+        await api.patch('/api/applications/bulk', {
+          ids: restoreIds,
+          operation: 'restore'
+        });
+        gridState.data = [...gridState.lastDeleted.data, ...gridState.data];
+        gridState.lastDeleted = null;
         showToast('Delete undone.');
-        drawGrid();
+      } catch (err) {
+        showToast('Restore failed. ' + err.message, 'error');
       }
+      drawGrid();
     });
   }
 }
