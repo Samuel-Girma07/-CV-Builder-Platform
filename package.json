@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "API-first CV and cover letter builder with a vanilla JavaScript frontend",
   "main": "app.js",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node app.js",
     "dev": "node --watch app.js",

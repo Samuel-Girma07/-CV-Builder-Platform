@@ -109,6 +109,21 @@ app.use((err, req, res, next) => {
   return res.status(status).json({ error: message });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   logger.info(`CV Builder API and client running at http://localhost:${PORT}`);
 });
+
+/* Graceful shutdown: stop accepting connections, let in-flight requests
+   finish, then close the Postgres pool before exiting. Prevents Render-style
+   restarts from dropping active requests or leaking pool clients. */
+function shutdown(signal) {
+  logger.info(`${signal} received: draining connections and closing the database pool...`);
+  server.close(() => {
+    pool.end().finally(() => process.exit(0));
+  });
+  // Hard exit if draining stalls (e.g. a hung socket).
+  setTimeout(() => process.exit(1), 10000).unref();
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
