@@ -126,8 +126,96 @@ async function sendTempPasswordEmail(toEmail, tempPassword) {
   return false;
 }
 
+/**
+ * Follow-up reminder email for one application.
+ * @returns {Promise<boolean>} true if sent, false when no provider configured
+ */
+async function sendReminderEmail(toEmail, { jobTitle, company, remindAt, message }) {
+  if (resend) {
+    const when = new Date(remindAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+    logger.info(`Attempting to send reminder email to: ${toEmail}...`);
+    try {
+      const { data, error } = await resend.emails.send({
+        from: process.env.RESEND_FROM || 'CV Builder Platform <onboarding@resend.dev>',
+        to: toEmail,
+        subject: `Follow up on your ${company} application`,
+        text: `Time to follow up on "${jobTitle}" at ${company} (scheduled for ${when}).\n\n${message || ''}\n\nKeep the momentum going — a short, polite nudge often moves applications forward.`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+            <h2 style="color:#4a5568;">Follow-up reminder</h2>
+            <p>Your reminder for <strong>${jobTitle}</strong> at <strong>${company}</strong> is due (${when}).</p>
+            ${message ? `<p style="background:#f7fafc;padding:12px;border-left:3px solid #4a5568;">${message}</p>` : ''}
+            <p>A short, polite nudge often moves applications forward.</p>
+          </div>
+        `,
+      });
+      if (error) {
+        logger.error(`RESEND API ERROR: ${JSON.stringify(error)}`);
+        throw new Error(`Email delivery failed: ${error.message || JSON.stringify(error)}`);
+      }
+      logger.info(`Reminder email sent to ${toEmail}. ID: ${data.id}`);
+      return true;
+    } catch (err) {
+      logger.error(`Error sending reminder email via Resend: ${err.message}`);
+      throw err;
+    }
+  }
+
+  const notice = `Email delivery is NOT configured. Reminder email to ${toEmail} was NOT sent.`;
+  if (process.env.NODE_ENV === 'production') logger.error(notice); else logger.warn(notice);
+  return false;
+}
+
+/**
+ * Weekly pipeline digest for one opted-in user.
+ * @param {string} toEmail
+ * @param {{applied:number,interviewing:number,offered:number,rejected:number,recent:number,pendingReminders:number}} stats
+ */
+async function sendDigestEmail(toEmail, stats) {
+  if (resend) {
+    logger.info(`Attempting to send weekly digest to: ${toEmail}...`);
+    try {
+      const { data, error } = await resend.emails.send({
+        from: process.env.RESEND_FROM || 'CV Builder Platform <onboarding@resend.dev>',
+        to: toEmail,
+        subject: 'Your weekly job-search digest',
+        text: `This week you added ${stats.recent} application(s). Pipeline totals — Applied: ${stats.applied}, Interviewing: ${stats.interviewing}, Offered/Hired: ${stats.offered}, Rejected: ${stats.rejected}. Pending follow-up reminders: ${stats.pendingReminders}.`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+            <h2 style="color:#4a5568;">Your week in review</h2>
+            <p>You added <strong>${stats.recent}</strong> new application${stats.recent === 1 ? '' : 's'} this week.</p>
+            <table style="border-collapse:collapse;margin:12px 0;">
+              <tr><td style="padding:4px 12px 4px 0;color:#718096;">Applied</td><td><strong>${stats.applied}</strong></td></tr>
+              <tr><td style="padding:4px 12px 4px 0;color:#718096;">Interviewing</td><td><strong>${stats.interviewing}</strong></td></tr>
+              <tr><td style="padding:4px 12px 4px 0;color:#718096;">Offered/Hired</td><td><strong>${stats.offered}</strong></td></tr>
+              <tr><td style="padding:4px 12px 4px 0;color:#718096;">Rejected</td><td><strong>${stats.rejected}</strong></td></tr>
+              <tr><td style="padding:4px 12px 4px 0;color:#718096;">Pending reminders</td><td><strong>${stats.pendingReminders}</strong></td></tr>
+            </table>
+            <p style="color:#a0aec0;font-size:12px;">You are receiving this because weekly digests are enabled in your settings.</p>
+          </div>
+        `,
+      });
+      if (error) {
+        logger.error(`RESEND API ERROR: ${JSON.stringify(error)}`);
+        throw new Error(`Email delivery failed: ${error.message || JSON.stringify(error)}`);
+      }
+      logger.info(`Weekly digest sent to ${toEmail}. ID: ${data.id}`);
+      return true;
+    } catch (err) {
+      logger.error(`Error sending digest via Resend: ${err.message}`);
+      throw err;
+    }
+  }
+
+  const notice = `Email delivery is NOT configured. Weekly digest to ${toEmail} was NOT sent.`;
+  if (process.env.NODE_ENV === 'production') logger.error(notice); else logger.warn(notice);
+  return false;
+}
+
 module.exports = {
   sendResetEmail,
   sendTempPasswordEmail,
+  sendReminderEmail,
+  sendDigestEmail,
   isEmailConfigured,
 };

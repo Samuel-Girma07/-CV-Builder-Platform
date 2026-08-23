@@ -2560,6 +2560,18 @@ async function applicationDetailView(id) {
               </div>
             `).join('')}
           </div>` : `<p class="standout-empty">Schedule your interview rounds to track dates and download calendar invites.</p>`}
+
+          <div style="border-top: 1px solid var(--border); margin-top: 16px; padding-top: 14px;">
+            <h3 style="font-size: 13.5px; margin: 0 0 4px 0;">Follow-up reminder</h3>
+            <form id="reminderForm" class="form" style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+              <div class="field" style="margin:0; flex:1; min-width:170px;">
+                <label for="remindAt">Remind me on</label>
+                <input type="datetime-local" id="remindAt" name="remindAt" required>
+              </div>
+              <button class="btn primary" type="submit" style="min-width:120px;">Set reminder</button>
+            </form>
+            <div id="reminderList" style="margin-top:10px;"></div>
+          </div>
         </section>
 
         <section class="standout-card standout-card--flags">
@@ -2756,6 +2768,51 @@ async function applicationDetailView(id) {
 
   // Mock interview practice wiring
   wireMockInterview(id);
+
+  // Follow-up reminders
+  const reminderList = document.getElementById('reminderList');
+  const renderReminders = async () => {
+    try {
+      const { reminders } = await api.get(`/api/applications/${id}/reminders`);
+      if (!reminders.length) {
+        reminderList.innerHTML = '<span class="muted" style="font-size:12.5px;">No reminders yet.</span>';
+        return;
+      }
+      reminderList.innerHTML = reminders.map((r) => `
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:6px 0;">
+          <span style="font-size:13px;">${r.status === 'pending' ? '⏰' : '✓'} ${new Date(r.remind_at).toLocaleString()}${r.message ? ` · ${escapeHtml(r.message)}` : ''}</span>
+          ${r.status === 'pending' ? `<button class="btn ghost" data-dismiss-reminder="${r.id}" style="padding:2px 8px; font-size:12px;">Dismiss</button>` : ''}
+        </div>`).join('');
+      reminderList.querySelectorAll('[data-dismiss-reminder]').forEach((b) => {
+        b.addEventListener('click', async () => {
+          try {
+            await api.post(`/api/reminders/${b.dataset.dismissReminder}/dismiss`, {});
+            await renderReminders();
+            showToast('Reminder dismissed.');
+          } catch (err) {
+            showToast(err.message, 'error');
+          }
+        });
+      });
+    } catch (err) {
+      reminderList.innerHTML = `<span class="muted" style="font-size:12.5px;">${escapeHtml(err.message)}</span>`;
+    }
+  };
+  const reminderForm = document.getElementById('reminderForm');
+  if (reminderForm) {
+    reminderForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const when = document.getElementById('remindAt').value;
+      try {
+        await api.post(`/api/applications/${id}/reminders`, { remindAt: new Date(when).toISOString() });
+        showToast('Reminder scheduled.');
+        await renderReminders();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+    renderReminders();
+  }
 
   // Truncate long blocks (job description, cover letter) with a See more/less toggle.
   wireClamps();
@@ -3046,6 +3103,10 @@ async function settingsView() {
               <option value="bold" ${profile.preferences?.defaultTemplate === 'bold' ? 'selected' : ''}>Bold</option>
             </select>
           </div>
+          <div class="field" style="display:flex; align-items:center; gap:10px;">
+            <input type="checkbox" id="digestOptIn" name="digestOptIn" ${state.user.digestOptIn !== false ? 'checked' : ''} style="width:auto;">
+            <label for="digestOptIn" style="margin:0;">Email me a weekly job-search digest</label>
+          </div>
           <button class="btn primary" type="submit">Save Preferences</button>
         </form>
       </section>
@@ -3109,10 +3170,16 @@ async function settingsView() {
     const restore = setBtnLoading(e.submitter, 'Saving…');
     try {
       const template = new FormData(form).get('defaultTemplate');
+      const digestOptIn = document.getElementById('digestOptIn').checked;
       const prefs = profile.preferences || {};
       prefs.defaultTemplate = template;
-      const data = await api.put('/api/profile', { ...profile, preferences: prefs });
+      const [data] = await Promise.all([
+        api.put('/api/profile', { ...profile, preferences: prefs }),
+        api.post('/api/auth/digest-preference', { digestOptIn }),
+      ]);
       state.profile = data.profile;
+      state.user.digestOptIn = digestOptIn;
+      localStorage.setItem('cv_user', JSON.stringify(state.user));
       showToast('Preferences saved.');
     } catch (err) {
       if (err.message === 'Request cancelled by user.') {

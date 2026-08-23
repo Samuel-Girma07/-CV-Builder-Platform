@@ -138,6 +138,18 @@ ALTER TABLE applications ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(255);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMP;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS digest_opt_in BOOLEAN NOT NULL DEFAULT true;
+
+CREATE TABLE IF NOT EXISTS reminders (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+  message TEXT NOT NULL DEFAULT '',
+  status VARCHAR(12) NOT NULL DEFAULT 'pending',
+  remind_at TIMESTAMPTZ NOT NULL,
+  sent_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 -- Normalize legacy free-text statuses onto the canonical set.
 UPDATE applications SET status = 'Applied'      WHERE lower(status) = 'applied';
@@ -185,6 +197,10 @@ CREATE INDEX IF NOT EXISTS idx_interview_sessions_user ON interview_sessions(use
 CREATE INDEX IF NOT EXISTS idx_interview_sessions_app ON interview_sessions(application_id);
 
 CREATE INDEX IF NOT EXISTS idx_interview_messages_session ON interview_messages(session_id, id);
+
+CREATE INDEX IF NOT EXISTS idx_reminders_user_pending
+  ON reminders(user_id, remind_at)
+  WHERE status = 'pending';
 
 CREATE INDEX IF NOT EXISTS idx_cv_versions_user ON cv_versions(user_id);
 

@@ -50,9 +50,11 @@ runStartupMigration();
 // Background job queue (pg-boss). Non-fatal: if it cannot start, the API
 // keeps serving and job producers no-op loudly instead of crashing.
 const { startQueue, stopQueue } = require('./config/queue');
-startQueue().catch((err) => {
-  logger.error(`Background job queue failed to start: ${err.message}`);
-});
+startQueue()
+  .then(() => require('./workers').init())
+  .catch((err) => {
+    logger.error(`Background job queue failed to start: ${err.message}`);
+  });
 
 const authRoutes = require('./routes/authRoutes');
 const profileRoutes = require('./routes/profileRoutes');
@@ -61,6 +63,7 @@ const analyticsRoutes = require('./routes/analyticsRoutes');
 const insightRoutes = require('./routes/insightRoutes');
 const interviewRoutes = require('./routes/interviewRoutes');
 const mockInterviewRoutes = require('./routes/mockInterviewRoutes');
+const reminderRoutes = require('./routes/reminderRoutes');
 const xrayRoutes = require('./routes/xrayRoutes');
 
 app.use(helmet());
@@ -88,6 +91,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/insights', insightRoutes);
 app.use('/api/interviews', interviewRoutes);
 app.use('/api/mock-interviews', mockInterviewRoutes);
+app.use('/api/reminders', reminderRoutes);
 app.use('/api/xray', xrayRoutes);
 
 app.use('/api', (req, res) => {

@@ -14,6 +14,7 @@ router.delete('/me', authLimiter, authMiddleware, authController.deleteAccount);
 router.post('/forgot-password', authLimiter, authController.forgotPassword);
 router.post('/reset-password', authLimiter, authController.resetPassword);
 router.post('/temp-password', authLimiter, authController.issueTempPassword);
+router.post('/digest-preference', authLimiter, authMiddleware, authController.updateDigestPreference);
 
 
 module.exports = router;

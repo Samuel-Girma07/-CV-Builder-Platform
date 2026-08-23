@@ -32,4 +32,8 @@ const interviewController = require('../controllers/interviewController');
 router.get('/:appId/interviews', interviewController.getByApplication);
 router.post('/:appId/interviews', interviewController.create);
 
+const reminderController = require('../controllers/reminderController');
+router.get('/:id/reminders', reminderController.listForApplication);
+router.post('/:id/reminders', reminderController.create);
+
 module.exports = router;

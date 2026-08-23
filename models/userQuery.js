@@ -80,6 +80,17 @@ const userQuery = {
   },
 
   /**
+   * Opt in/out of the weekly pipeline digest email.
+   */
+  async setDigestOptIn(id, digestOptIn) {
+    const result = await pool.query(
+      `UPDATE users SET digest_opt_in = $2 WHERE id = $1 RETURNING id`,
+      [id, Boolean(digestOptIn)]
+    );
+    return result.rows[0] || null;
+  },
+
+  /**
    * Store a hashed reset token with an expiry. Deliberately does NOT touch
    * password_hash: the current credential stays valid until a reset completes.
    */

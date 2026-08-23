@@ -8,7 +8,7 @@ const { logger } = require('../middlewares/logger');
   enqueued without a worker simply stay pending until one runs, so shipping
   the producer and consumer independently is always safe.
 */
-const QUEUES = ['email.send', 'reminder.due'];
+const QUEUES = ['email.send', 'reminder.due', 'email.weekly-digest'];
 
 let boss = null;
 let running = false;

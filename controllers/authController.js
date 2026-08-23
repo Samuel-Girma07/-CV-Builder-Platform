@@ -257,6 +257,20 @@ const authController = {
     }
   },
 
+  async updateDigestPreference(req, res, next) {
+    try {
+      const { digestOptIn } = req.body;
+      if (typeof digestOptIn !== 'boolean') {
+        return res.status(400).json({ error: 'digestOptIn must be true or false.' });
+      }
+      const updated = await userQuery.setDigestOptIn(req.user.id, digestOptIn);
+      if (!updated) return res.status(404).json({ error: 'User not found.' });
+      return res.json({ message: digestOptIn ? 'Weekly digest enabled.' : 'Weekly digest disabled.' });
+    } catch (err) {
+      return next(err);
+    }
+  },
+
   async deleteAccount(req, res, next) {
     try {
       await userQuery.deleteById(req.user.id);
