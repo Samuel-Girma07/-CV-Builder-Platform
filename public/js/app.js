@@ -321,6 +321,13 @@ function aiLoader(title, steps, onCancel) {
       window.clearInterval(tick);
       overlay.remove();
     },
+    /* Live progress override (e.g. streaming char counts) — pauses the
+       rotating step messages until cleared. */
+    setStatus(text) {
+      statusEl.textContent = text;
+      if (text) window.clearInterval(stepTimer);
+      else { stepTimer = window.setInterval(() => { if (step < steps.length - 1) { step += 1; paint(); } }, 2600); }
+    },
   };
 }
 
@@ -2567,21 +2574,81 @@ async function applicationDetailView(id) {
   document.querySelector('#coverForm').addEventListener('submit', async (event) => {
     event.preventDefault();
     const body = Object.fromEntries(new FormData(event.currentTarget).entries());
+    const abort = new AbortController();
+
+    /* Streaming generation: mint a short-lived ticket (the SSE reader cannot
+       send Authorization headers), then render deltas as they arrive. */
+    const loader = aiLoader('Writing your cover letter', [
+      'Reading the job description…',
+      'Matching your experience…',
+      'Writing the letter…',
+      'Refining the tone…',
+    ], () => abort.abort());
+
+    let preview = document.getElementById('coverLetterStream');
+    if (!preview) {
+      preview = document.createElement('div');
+      preview.id = 'coverLetterStream';
+      preview.className = 'clamp-body';
+      preview.style.cssText = 'white-space: pre-wrap; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 15px; margin-top: 12px; min-height: 120px; font-size: 14px; line-height: 1.6; color: var(--text);';
+      document.querySelector('#coverForm').insertAdjacentElement('afterend', preview);
+    }
+    preview.textContent = '';
+
     try {
-      await runWithLoader('Writing your cover letter', [
-        'Reading the job description…',
-        'Matching your experience…',
-        'Writing the letter…',
-        'Refining the tone…',
-      ], (signal) => api.post(`/api/applications/${id}/cover-letter`, body, { signal, timeout: 90000 }));
+      const { ticket } = await api.post(`/api/applications/${id}/cover-letter/stream-ticket`, {});
+      const response = await fetch(`/api/applications/${id}/cover-letter/stream?ticket=${encodeURIComponent(ticket)}&tone=${encodeURIComponent(body.selectedTone || 'Formal')}`, { signal: abort.signal });
+      const contentType = response.headers.get('content-type') || '';
+      if (!response.ok || !contentType.includes('text/event-stream')) {
+        let message = 'Streaming is unavailable right now.';
+        if (contentType.includes('application/json')) {
+          const data = await response.json().catch(() => null);
+          if (data && data.error) message = data.error;
+        }
+        throw new Error(message);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let done = false;
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        if (readerDone) break;
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split('\n\n');
+        buffer = frames.pop() || '';
+        for (const frame of frames) {
+          const eventName = (frame.match(/^event: (.+)$/m) || [])[1];
+          const dataLine = (frame.match(/^data: (.+)$/m) || [])[1];
+          if (!eventName || !dataLine) continue;
+          const payloadData = JSON.parse(dataLine);
+          if (eventName === 'delta') {
+            preview.textContent += payloadData.t;
+            loader.setStatus(`${preview.textContent.length} characters drafted…`);
+          } else if (eventName === 'reset') {
+            preview.textContent = '';
+            loader.setStatus('Restarting with a faster model…');
+          } else if (eventName === 'done') {
+            done = true;
+          } else if (eventName === 'error') {
+            throw new Error(payloadData.message || 'Generation failed.');
+          }
+        }
+      }
+
       showToast('Cover letter generated.');
       await applicationDetailView(id);
     } catch (err) {
-      if (err.message === 'Request cancelled by user.') {
+      if (err.message === 'Request cancelled by user.' || err.name === 'AbortError') {
         showToast('Cancelled.', 'info');
       } else {
         showToast(err.message, 'error');
       }
+      if (document.body.contains(preview)) preview.remove();
+    } finally {
+      loader.stop();
     }
   });
 

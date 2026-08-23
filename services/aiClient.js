@@ -81,4 +81,81 @@ async function callAi(params) {
   }
 }
 
-module.exports = { callAi };
+/**
+ * Streaming variant of callAi. Same resilience contract: primary gets a
+ * short window, the fallback gets whatever remains of one shared deadline.
+ *
+ * @param {object} params - chat.completions.create() params (without `model`)
+ * @param {object} handlers
+ * @param {(delta: string) => void} [handlers.onDelta] - incremental text
+ * @param {() => void} [handlers.onReset] - called when partial output from a
+ *   failed attempt must be discarded before the fallback restarts clean
+ * @param {AbortSignal} [handlers.signal] - external cancel (client disconnect)
+ * @returns {Promise<string>} the full generated text
+ */
+async function callAiStream(params, { onDelta = () => {}, onReset, signal } = {}) {
+  const startedAt = Date.now();
+
+  async function runAttempt(model, budgetMs) {
+    const abort = new AbortController();
+    const stopTimer = setTimeout(() => abort.abort(), Math.max(2000, budgetMs));
+    const onExternalAbort = () => abort.abort();
+    if (signal) {
+      if (signal.aborted) onExternalAbort();
+      else signal.addEventListener('abort', onExternalAbort, { once: true });
+    }
+    let emitted = 0;
+    try {
+      const stream = await nvidiaClient.chat.completions.create(
+        { ...params, model, stream: true },
+        { signal: abort.signal }
+      );
+      let full = '';
+      for await (const chunk of stream) {
+        const delta = chunk.choices?.[0]?.delta?.content || '';
+        if (delta) {
+          full += delta;
+          emitted += delta.length;
+          onDelta(delta);
+        }
+      }
+      if (!full.trim()) throw new Error('empty_stream');
+      return full;
+    } catch (err) {
+      err.emittedChars = emitted;
+      throw err;
+    } finally {
+      clearTimeout(stopTimer);
+      if (signal) signal.removeEventListener('abort', onExternalAbort);
+      abort.abort(); // release the underlying connection either way
+    }
+  }
+
+  logger.info(`AI stream: primary model ${PRIMARY_MODEL}`);
+  try {
+    return await runAttempt(PRIMARY_MODEL, PRIMARY_TIMEOUT_MS);
+  } catch (primaryErr) {
+    if (primaryErr.emittedChars > 0 && typeof onReset === 'function') {
+      onReset();
+    }
+    logger.warn(
+      `AI stream: primary failed after ${primaryErr.emittedChars} chars (${primaryErr.message}). Trying fallback.`
+    );
+  }
+
+  const remaining = TOTAL_DEADLINE_MS - (Date.now() - startedAt);
+  if (remaining <= 2000) {
+    logger.error('AI stream: shared deadline exhausted before fallback could run.');
+    throw new Error(AI_UNAVAILABLE_MESSAGE);
+  }
+
+  logger.info(`AI stream: fallback model ${FALLBACK_MODEL} (budget ${remaining}ms)`);
+  try {
+    return await runAttempt(FALLBACK_MODEL, remaining);
+  } catch (err) {
+    logger.error(`AI stream: fallback also failed (${err.message})`);
+    throw new Error(AI_UNAVAILABLE_MESSAGE);
+  }
+}
+
+module.exports = { callAi, callAiStream, AI_UNAVAILABLE_MESSAGE };

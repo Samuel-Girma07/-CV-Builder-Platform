@@ -5,6 +5,11 @@ const { aiLimiter } = require('../middlewares/rateLimiters');
 
 const router = express.Router();
 
+// Registered before authMiddleware: the SSE reader cannot send Authorization
+// headers, so this endpoint authenticates with a 60s single-purpose ticket
+// issued by POST /:id/cover-letter/stream-ticket instead.
+router.get('/:id/cover-letter/stream', applicationController.streamCoverLetter);
+
 router.use(authMiddleware);
 
 router.get('/stats', applicationController.getStats);
@@ -17,6 +22,7 @@ router.get('/:id', applicationController.getOne);
 router.patch('/:id', applicationController.updatePartial);
 router.delete('/:id', applicationController.delete);
 router.post('/:id/cover-letter', aiLimiter, applicationController.generateCoverLetter);
+router.post('/:id/cover-letter/stream-ticket', aiLimiter, applicationController.issueCoverLetterStreamTicket);
 router.get('/:id/cover-letter.pdf', applicationController.getCoverLetterPdf);
 router.post('/:id/tailor-cv', aiLimiter, applicationController.tailorCv);
 router.get('/:id/tailored-cv.pdf', applicationController.downloadTailoredCvPdf);
