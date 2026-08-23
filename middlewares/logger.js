@@ -7,8 +7,23 @@ const path = require('path');
 const LOG_DIR = path.join(__dirname, '..', 'logs');
 const LOG_FILE = path.join(LOG_DIR, 'app.log');
 
+// Size-based single-generation rotation: app.log -> app.log.1 when the
+// active file exceeds 5MB, so the log can never grow without bound.
+const MAX_LOG_BYTES = 5 * 1024 * 1024;
+
 if (!fs.existsSync(LOG_DIR)) {
   fs.mkdirSync(LOG_DIR, { recursive: true });
+}
+
+function rotateIfNeeded() {
+  try {
+    const stat = fs.statSync(LOG_FILE);
+    if (stat.size > MAX_LOG_BYTES) {
+      fs.renameSync(LOG_FILE, `${LOG_FILE}.1`);
+    }
+  } catch (err) {
+    // File does not exist yet (or is momentarily locked) — nothing to rotate.
+  }
 }
 
 function write(level, message) {
@@ -21,6 +36,8 @@ function write(level, message) {
   } else {
     console.log(line);
   }
+
+  rotateIfNeeded();
 
   // Append asynchronously so logging never blocks the request cycle.
   fs.appendFile(LOG_FILE, `${line}\n`, (err) => {

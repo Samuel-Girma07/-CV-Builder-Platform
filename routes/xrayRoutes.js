@@ -16,5 +16,6 @@ router.use(authMiddleware);
 router.post('/upload', upload.single('cvFile'), xrayController.uploadXray);
 router.post('/:id/pdf-ticket', xrayController.issuePdfTicket);
 router.get('/', xrayController.listVersions);
+router.delete('/:id', xrayController.deleteVersion);
 
 module.exports = router;

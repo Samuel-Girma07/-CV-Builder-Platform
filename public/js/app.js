@@ -2890,12 +2890,13 @@ async function xrayView() {
         <button class="btn primary" type="submit">Scan with X-Ray</button>
       </form>
       ${versions.length > 0 ? `
-        <div style="margin-top: 16px;">
-          <label class="muted" style="font-size: 13px; margin-right: 8px;">Previous scans:</label>
+        <div style="margin-top: 16px; display: flex; align-items: center; gap: 8px;">
+          <label class="muted" style="font-size: 13px;">Previous scans:</label>
           <select id="xrayHistory" style="width: auto; display: inline-block;">
             <option value="">-- Select a past scan --</option>
             ${versions.map(v => `<option value="${v.id}">${escapeHtml(v.file_name)} (${new Date(v.uploaded_at).toLocaleDateString()})</option>`).join('')}
           </select>
+          <button class="btn ghost" id="xrayDeleteBtn" disabled title="Delete the selected scan">Delete</button>
         </div>
       ` : ''}
     </section>
@@ -3031,17 +3032,42 @@ async function xrayView() {
   });
 
   const historyDropdown = document.querySelector('#xrayHistory');
+  const deleteBtn = document.querySelector('#xrayDeleteBtn');
   if (historyDropdown) {
     historyDropdown.addEventListener('change', (e) => {
       const id = e.target.value;
+      if (deleteBtn) deleteBtn.disabled = !id;
       if (id) {
         const version = versions.find(v => String(v.id) === id);
         if (version) {
           renderReport(version.id, version.parsability_report);
+          return;
         }
-      } else {
-        document.querySelector('#xrayResult').style.display = 'none';
       }
+      document.querySelector('#xrayResult').style.display = 'none';
+    });
+  }
+
+  if (deleteBtn && historyDropdown) {
+    deleteBtn.addEventListener('click', () => {
+      const id = historyDropdown.value;
+      if (!id) return;
+      showModal({
+        title: 'Delete scan',
+        content: 'This permanently removes the stored PDF and its report. This cannot be undone.',
+        actions: [
+          { label: 'Cancel', onClick: () => {} },
+          { label: 'Delete', primary: true, onClick: async () => {
+            try {
+              await api.delete(`/api/xray/${id}`);
+              showToast('Scan deleted.');
+              await xrayView();
+            } catch (err) {
+              showToast(err.message, 'error');
+            }
+          }},
+        ],
+      });
     });
   }
 }

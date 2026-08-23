@@ -33,3 +33,58 @@ describe('requestLogger', () => {
     expect(capturedLine).not.toContain('?');
   });
 });
+
+describe('log rotation', () => {
+  test('rotates app.log to app.log.1 when it exceeds the size cap', () => {
+    jest.resetModules();
+    const renameSpy = jest.fn();
+    jest.doMock('fs', () => ({
+      existsSync: () => true,
+      mkdirSync: jest.fn(),
+      statSync: () => ({ size: 6 * 1024 * 1024 }), // over the 5MB cap
+      renameSync: renameSpy,
+      appendFile: (file, data, cb) => cb(null),
+    }));
+
+    const { logger } = require('../middlewares/logger');
+    logger.info('rotation trigger line');
+
+    expect(renameSpy).toHaveBeenCalledTimes(1);
+    const [from, to] = renameSpy.mock.calls[0];
+    expect(from).toMatch(/app\.log$/);
+    expect(to).toMatch(/app\.log\.1$/);
+  });
+
+  test('does not rotate a file under the cap', () => {
+    jest.resetModules();
+    const renameSpy = jest.fn();
+    jest.doMock('fs', () => ({
+      existsSync: () => true,
+      mkdirSync: jest.fn(),
+      statSync: () => ({ size: 1024 }),
+      renameSync: renameSpy,
+      appendFile: (file, data, cb) => cb(null),
+    }));
+
+    const { logger } = require('../middlewares/logger');
+    logger.info('small log line');
+
+    expect(renameSpy).not.toHaveBeenCalled();
+  });
+
+  test('a missing log file is tolerated without rotating', () => {
+    jest.resetModules();
+    const renameSpy = jest.fn();
+    jest.doMock('fs', () => ({
+      existsSync: () => false,
+      mkdirSync: jest.fn(),
+      statSync: () => { throw new Error('ENOENT'); },
+      renameSync: renameSpy,
+      appendFile: (file, data, cb) => cb(null),
+    }));
+
+    const { logger } = require('../middlewares/logger');
+    expect(() => logger.info('first ever line')).not.toThrow();
+    expect(renameSpy).not.toHaveBeenCalled();
+  });
+});

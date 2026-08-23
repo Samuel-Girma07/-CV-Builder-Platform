@@ -4,6 +4,9 @@ const { analyzePdfBuffer } = require('../utils/atsXray');
 const { isPdfBuffer } = require('../config/upload');
 
 const PDF_TICKET_TTL_SECONDS = 60;
+// Full PDFs live in Postgres BYTEA, so scans are capped per user to bound
+// storage growth; the newest versions win and old ones are pruned on upload.
+const MAX_CV_VERSIONS = 20;
 
 function validateId(idParam) {
   const num = Number(idParam);
@@ -80,6 +83,15 @@ const xrayController = {
         [userId, fileName, buffer, JSON.stringify(safeReport)]
       );
 
+      // Retention: keep only the newest MAX_CV_VERSIONS scans for this user.
+      await pool.query(
+        `DELETE FROM cv_versions
+         WHERE user_id = $1 AND id NOT IN (
+           SELECT id FROM cv_versions WHERE user_id = $1 ORDER BY uploaded_at DESC, id DESC LIMIT $2
+         )`,
+        [userId, MAX_CV_VERSIONS]
+      );
+
       return res.json({ id: result.rows[0].id, report });
     } catch (err) {
       return next(err);
@@ -152,8 +164,27 @@ const xrayController = {
         'SELECT id, file_name, uploaded_at, parsability_report FROM cv_versions WHERE user_id = $1 ORDER BY uploaded_at DESC',
         [userId]
       );
-      
+
       return res.json({ versions: result.rows });
+    } catch (err) {
+      return next(err);
+    }
+  },
+
+  async deleteVersion(req, res, next) {
+    try {
+      const versionId = validateId(req.params.id);
+      if (!versionId) return res.status(400).json({ error: 'Invalid CV version ID.' });
+
+      const result = await pool.query(
+        'DELETE FROM cv_versions WHERE id = $1 AND user_id = $2 RETURNING id',
+        [versionId, req.user.id]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'CV version not found' });
+      }
+
+      return res.json({ message: 'Scan deleted.', id: result.rows[0].id });
     } catch (err) {
       return next(err);
     }
