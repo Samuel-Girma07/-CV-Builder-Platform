@@ -47,6 +47,13 @@ async function runStartupMigration() {
 }
 runStartupMigration();
 
+// Background job queue (pg-boss). Non-fatal: if it cannot start, the API
+// keeps serving and job producers no-op loudly instead of crashing.
+const { startQueue, stopQueue } = require('./config/queue');
+startQueue().catch((err) => {
+  logger.error(`Background job queue failed to start: ${err.message}`);
+});
+
 const authRoutes = require('./routes/authRoutes');
 const profileRoutes = require('./routes/profileRoutes');
 const applicationRoutes = require('./routes/applicationRoutes');
@@ -118,8 +125,17 @@ const server = app.listen(PORT, () => {
    restarts from dropping active requests or leaking pool clients. */
 function shutdown(signal) {
   logger.info(`${signal} received: draining connections and closing the database pool...`);
-  server.close(() => {
-    pool.end().finally(() => process.exit(0));
+  server.close(async () => {
+    try {
+      await stopQueue();
+    } catch (err) {
+      logger.error(`Queue shutdown error: ${err.message}`);
+    }
+    try {
+      await pool.end();
+    } finally {
+      process.exit(0);
+    }
   });
   // Hard exit if draining stalls (e.g. a hung socket).
   setTimeout(() => process.exit(1), 10000).unref();
