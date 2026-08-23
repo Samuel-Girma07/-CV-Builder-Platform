@@ -73,7 +73,7 @@ app.get('*', (req, res) => {
 });
 
 app.use((err, req, res, next) => {
-  logger.error(`Server error on ${req.method} ${req.originalUrl}: ${err.stack || err.message}`);
+  logger.error(`Server error on ${req.method} ${req.baseUrl || ''}${req.path}: ${err.stack || err.message}`);
 
   if (res.headersSent) {
     return next(err);
