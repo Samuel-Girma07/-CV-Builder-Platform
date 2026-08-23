@@ -42,7 +42,7 @@ const state = {
 };
 
 /* ----------------------------------------------------------------
-   Inline icon set â€” understated, single-stroke, functional.
+   Inline icon set — understated, single-stroke, functional.
    ---------------------------------------------------------------- */
 const icons = {
   overview: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
@@ -80,7 +80,7 @@ class AuthError extends Error {
   }
 }
 
-// Endpoints that legitimately answer 401/403 to anonymous visitors â€” a failure
+// Endpoints that legitimately answer 401/403 to anonymous visitors — a failure
 // there must never trigger the global "session expired" logout flow.
 const PUBLIC_AUTH_PATHS = [
   '/api/auth/login',
@@ -212,7 +212,7 @@ function escapeHtml(value = '') {
 
 function initials(value = '') {
   const parts = String(value).trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return 'â€“';
+  if (!parts.length) return '–';
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
@@ -611,7 +611,7 @@ function authView(mode = 'login') {
     }
 
     const body = Object.fromEntries(new FormData(form).entries());
-    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), isRegister ? 'Creatingâ€¦' : 'Signing inâ€¦');
+    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), isRegister ? 'Creating…' : 'Signing in…');
     try {
       const data = await api.post(`/api/auth/${isRegister ? 'register' : 'login'}`, body);
       setAuth(data.token, data.user);
@@ -716,7 +716,7 @@ async function forgotPasswordView() {
                 Local Demo Mode Reset Link:
               </div>
               <div style="color: var(--muted); margin-bottom: 8px; font-size: 12px; line-height: 1.4;">
-                RESEND_API_KEY is not configured. No email was sent â€” open this local link instead:
+                RESEND_API_KEY is not configured. No email was sent — open this local link instead:
               </div>
               <div style="display: flex; gap: 8px; align-items: center;">
                 <input id="devLinkInput" readonly style="flex: 1; font-size: 12px; padding: 6px 10px; background: var(--surface-3); border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text);" />
@@ -738,7 +738,7 @@ async function forgotPasswordView() {
   document.querySelector('#forgotForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Sendingâ€¦');
+    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Sending…');
     const devLinkContainer = document.querySelector('#devLinkContainer');
     devLinkContainer.style.display = 'none';
 
@@ -969,7 +969,7 @@ async function updatePasswordView() {
       return;
     }
 
-    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Savingâ€¦');
+    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Saving…');
     try {
       await api.post('/api/auth/update-password', Object.fromEntries(new FormData(form)));
       if (timerInterval) clearInterval(timerInterval);
@@ -1058,7 +1058,7 @@ function resetPasswordView() {
       return;
     }
 
-    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Savingâ€¦');
+    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), 'Saving…');
     try {
       const data = await api.post('/api/auth/reset-password', { token, newPassword });
       setAuth(data.token, data.user);
@@ -1081,7 +1081,7 @@ function resetPasswordView() {
 }
 
 /* ----------------------------------------------------------------
-   Authenticated shell â€” left rail + topbar
+   Authenticated shell — left rail + topbar
    ---------------------------------------------------------------- */
 const RAIL = [
   { route: 'dashboard', label: 'Home', icon: 'overview' },
@@ -1120,7 +1120,7 @@ function shell(content, { search = false } = {}) {
       <main class="main">
         <div class="topbar">
           ${search
-            ? `<label class="search"><span aria-hidden="true">${icons.search}</span><input id="globalSearch" type="search" placeholder="Search your applicationsâ€¦" aria-label="Search applications"></label>`
+            ? `<label class="search"><span aria-hidden="true">${icons.search}</span><input id="globalSearch" type="search" placeholder="Search your applications…" aria-label="Search applications"></label>`
             : '<span class="rail-spacer"></span>'}
           <div class="topbar-right" id="topbarProfile" style="cursor: pointer;" title="Go to Profile">
             <div class="greeting">
@@ -1311,7 +1311,7 @@ const TILE_COLORS = ['amber', 'coral', 'teal', 'slate'];
 
 function applicationTile(item, index) {
   const score = item.ats_match_score || 0;
-  const trend = score >= 45 ? 'â–²' : 'â–¼';
+  const trend = score >= 45 ? '▲' : '▼';
   const band = score >= 75 ? 'Strong match' : score >= 45 ? 'Partial match' : 'Low match';
   return `
     <button class="tile ${TILE_COLORS[index % TILE_COLORS.length]}" data-open-app="${item.id}">
@@ -1374,7 +1374,7 @@ function activityRow(item) {
       <span class="row-mark">${escapeHtml(initials(item.company))}</span>
       <div class="row-main">
         <div class="t">${escapeHtml(item.job_title)}</div>
-        <div class="s">${escapeHtml(item.company)}${hasLetter ? ' Â· cover letter ready' : ''}</div>
+        <div class="s">${escapeHtml(item.company)}${hasLetter ? ' · cover letter ready' : ''}</div>
       </div>
       <div class="row-right">
         <span class="score ${scoreClass(score)} num">${score}%</span>
@@ -1495,7 +1495,7 @@ async function dashboardView() {
           </section>`}
 
         <section class="chart-card">
-          <div class="panel-head"><h2>ATS trend</h2><span class="eyebrow">Oldest â†’ newest</span></div>
+          <div class="panel-head"><h2>ATS trend</h2><span class="eyebrow">Oldest → newest</span></div>
           ${buildSparkline(trendScores)}
         </section>
         
@@ -1562,7 +1562,7 @@ function quickNewForm() {
           <option value="network">Network/Event</option>
         </select>
       </div>
-      <div class="field"><label for="qDesc">Job description</label><textarea id="qDesc" name="jobDescription" placeholder="Paste the descriptionâ€¦" required></textarea></div>
+      <div class="field"><label for="qDesc">Job description</label><textarea id="qDesc" name="jobDescription" placeholder="Paste the description…" required></textarea></div>
       <button class="btn primary block" type="submit">Analyze &amp; score</button>
     </form>`;
 }
@@ -1603,10 +1603,10 @@ function wireQuickPanel() {
       const body = Object.fromEntries(new FormData(formTarget).entries());
       try {
         const data = await runWithLoader('Scoring your application', [
-          'Saving the applicationâ€¦',
-          'Comparing against your CVâ€¦',
-          'Scoring the matchâ€¦',
-          'Listing missing skillsâ€¦',
+          'Saving the application…',
+          'Comparing against your CV…',
+          'Scoring the match…',
+          'Listing missing skills…',
         ], (signal) => api.post('/api/applications', body, { signal, timeout: 90000 }));
         
         if (data.application.ats_match_score < 30) {
@@ -1638,10 +1638,10 @@ function wireQuickPanel() {
       const formData = new FormData(event.currentTarget);
       try {
         await runWithLoader('Parsing your CV', [
-          'Reading your CVâ€¦',
-          'Extracting experienceâ€¦',
-          'Structuring skillsâ€¦',
-          'Finalizing profileâ€¦',
+          'Reading your CV…',
+          'Extracting experience…',
+          'Structuring skills…',
+          'Finalizing profile…',
         ], (signal) => api.request('/api/profile/upload', { method: 'POST', body: formData, timeout: 120000, signal }));
         showToast('CV parsed and saved.');
         await dashboardView();
@@ -1684,7 +1684,7 @@ function textareaField(name, label, value = '') {
 function renderExperienceCard(item = {}) {
   return `
     <div class="dynamic-card experience-card" style="border: 1px solid var(--border); padding: 15px; margin-bottom: 15px; border-radius: 8px; background: var(--surface-2); position: relative;">
-      <button type="button" class="btn ghost remove-card-btn" style="position: absolute; top: 10px; right: 10px; color: var(--error); padding: 4px; width: 32px; height: 32px; min-width: 32px; line-height: 1; border-color: transparent;" title="Remove">âœ•</button>
+      <button type="button" class="btn ghost remove-card-btn" style="position: absolute; top: 10px; right: 10px; color: var(--error); padding: 4px; width: 32px; height: 32px; min-width: 32px; line-height: 1; border-color: transparent;" title="Remove">✕</button>
       <div class="grid two" style="margin-bottom: 10px;">
         <div class="field" style="margin: 0;"><label>Title</label><input type="text" class="exp-title" value="${escapeHtml(item.title || '')}" required></div>
         <div class="field" style="margin: 0;"><label>Company</label><input type="text" class="exp-company" value="${escapeHtml(item.company || '')}" required></div>
@@ -1703,7 +1703,7 @@ function renderExperienceCard(item = {}) {
 function renderEducationCard(item = {}) {
   return `
     <div class="dynamic-card education-card" style="border: 1px solid var(--border); padding: 15px; margin-bottom: 15px; border-radius: 8px; background: var(--surface-2); position: relative;">
-      <button type="button" class="btn ghost remove-card-btn" style="position: absolute; top: 10px; right: 10px; color: var(--error); padding: 4px; width: 32px; height: 32px; min-width: 32px; line-height: 1; border-color: transparent;" title="Remove">âœ•</button>
+      <button type="button" class="btn ghost remove-card-btn" style="position: absolute; top: 10px; right: 10px; color: var(--error); padding: 4px; width: 32px; height: 32px; min-width: 32px; line-height: 1; border-color: transparent;" title="Remove">✕</button>
       <div class="grid two" style="margin-bottom: 10px;">
         <div class="field" style="margin: 0;"><label>Degree</label><input type="text" class="edu-degree" value="${escapeHtml(item.degree || '')}" required></div>
         <div class="field" style="margin: 0;"><label>Institution</label><input type="text" class="edu-institution" value="${escapeHtml(item.institution || '')}" required></div>
@@ -1749,8 +1749,8 @@ function profileForm(profile = {}) {
         <button type="button" class="btn ghost" id="addEducationBtn" style="margin-top: 10px; justify-self: start;">${icons.plus} Add Education</button>
       </div>
 
-      ${textareaField('projects', 'Projects â€” title | type | tools | outcome | link', objectsToLines(profile.projects, ['title', 'type', 'tools', 'outcome', 'link']))}
-      ${textareaField('certifications', 'Certifications â€” name | issuer | year', objectsToLines(profile.certifications, ['name', 'issuer', 'year']))}
+      ${textareaField('projects', 'Projects — title | type | tools | outcome | link', objectsToLines(profile.projects, ['title', 'type', 'tools', 'outcome', 'link']))}
+      ${textareaField('certifications', 'Certifications — name | issuer | year', objectsToLines(profile.certifications, ['name', 'issuer', 'year']))}
       <div class="actions">
         <button class="btn primary" type="submit">Save profile</button>
         ${generatePremiumBtn('summaryBtn', 'Generate summary', 'Generating summary', 'button')}
@@ -1900,7 +1900,7 @@ async function profileView() {
 
   document.querySelector('#profileForm').addEventListener('submit', async (event) => {
     event.preventDefault();
-    const restore = setBtnLoading(event.currentTarget.querySelector('button[type="submit"]'), 'Savingâ€¦');
+    const restore = setBtnLoading(event.currentTarget.querySelector('button[type="submit"]'), 'Saving…');
     try {
       // Collect skill levels
       const levels = {};
@@ -1932,9 +1932,9 @@ async function profileView() {
       const current = readProfileForm(document.querySelector('#profileForm'));
       await api.put('/api/profile', current);
       const data = await runWithLoader('Generating summary', [
-        'Reviewing your profileâ€¦',
-        'Drafting a summaryâ€¦',
-        'Polishing the wordingâ€¦',
+        'Reviewing your profile…',
+        'Drafting a summary…',
+        'Polishing the wording…',
       ], (signal) => api.post('/api/profile/summary', {}, { signal, timeout: 90000 }));
       state.profile = data.profile;
       showToast('Summary generated.');
@@ -1953,10 +1953,10 @@ async function profileView() {
     const formData = new FormData(event.currentTarget);
     try {
       const data = await runWithLoader('Parsing your CV', [
-        'Reading your CVâ€¦',
-        'Extracting experienceâ€¦',
-        'Structuring skillsâ€¦',
-        'Finalizing profileâ€¦',
+        'Reading your CV…',
+        'Extracting experience…',
+        'Structuring skills…',
+        'Finalizing profile…',
       ], (signal) => api.request('/api/profile/upload', { method: 'POST', body: formData, timeout: 120000, signal }));
       state.profile = data.profile;
       showToast('CV parsed and saved.');
@@ -2080,7 +2080,7 @@ async function cvView() {
     skills.forEach((skill) => {
       levels[skill] = form.get(skill);
     });
-    const restore = setBtnLoading(event.submitter, 'Savingâ€¦');
+    const restore = setBtnLoading(event.submitter, 'Saving…');
     try {
       const data = await api.put('/api/profile/skill-levels', { levels });
       state.profile = data.profile;
@@ -2117,7 +2117,7 @@ async function newApplicationView() {
   shell(`
     <div class="page-title">
       <h1>New application</h1>
-      <p>Paste a job description â€” it is scored against your saved CV profile.</p>
+      <p>Paste a job description — it is scored against your saved CV profile.</p>
     </div>
     <section class="panel" style="max-width:640px">
       <form class="form" id="applicationForm">
@@ -2154,10 +2154,10 @@ async function newApplicationView() {
 
       const body = Object.fromEntries(new FormData(formTarget).entries());
       const data = await runWithLoader('Scoring your application', [
-        'Saving the applicationâ€¦',
-        'Comparing against your CVâ€¦',
-        'Scoring the matchâ€¦',
-        'Listing missing skillsâ€¦',
+        'Saving the application…',
+        'Comparing against your CV…',
+        'Scoring the match…',
+        'Listing missing skills…',
       ], (signal) => api.post('/api/applications', body, { signal, timeout: 90000 }));
 
       if (data.application.ats_match_score < 30) {
@@ -2368,7 +2368,7 @@ async function applicationDetailView(id) {
               <div class="standout-item">
                 <div class="standout-item-main">
                   <div class="standout-item-title">${escapeHtml(inv.title)}</div>
-                  <div class="standout-item-sub">${new Date(inv.start_time).toLocaleString()} â€“ ${new Date(inv.end_time).toLocaleTimeString()}${inv.location ? ' Â· ' + escapeHtml(inv.location) : ''}</div>
+                  <div class="standout-item-sub">${new Date(inv.start_time).toLocaleString()} – ${new Date(inv.end_time).toLocaleTimeString()}${inv.location ? ' · ' + escapeHtml(inv.location) : ''}</div>
                 </div>
                 <button class="btn ghost" data-ics="${inv.id}">${icons.calendar} .ics</button>
               </div>
@@ -2406,10 +2406,10 @@ async function applicationDetailView(id) {
     const body = Object.fromEntries(new FormData(event.currentTarget).entries());
     try {
       await runWithLoader('Writing your cover letter', [
-        'Reading the job descriptionâ€¦',
-        'Matching your experienceâ€¦',
-        'Writing the letterâ€¦',
-        'Refining the toneâ€¦',
+        'Reading the job description…',
+        'Matching your experience…',
+        'Writing the letter…',
+        'Refining the tone…',
       ], (signal) => api.post(`/api/applications/${id}/cover-letter`, body, { signal, timeout: 90000 }));
       showToast('Cover letter generated.');
       await applicationDetailView(id);
@@ -2472,10 +2472,10 @@ async function applicationDetailView(id) {
       event.preventDefault();
       try {
         await runWithLoader('Optimizing your CV', [
-          'Analyzing job requirementsâ€¦',
-          'Cross-referencing your experienceâ€¦',
-          'Rewriting bullet points for impactâ€¦',
-          'Finalizing ATS complianceâ€¦',
+          'Analyzing job requirements…',
+          'Cross-referencing your experience…',
+          'Rewriting bullet points for impact…',
+          'Finalizing ATS compliance…',
         ], (signal) => api.post(`/api/applications/${id}/tailor-cv`, {}, { signal, timeout: 90000 }));
         showToast('CV optimized for this job.');
         await applicationDetailView(id);
@@ -2496,9 +2496,9 @@ async function applicationDetailView(id) {
       event.preventDefault();
       try {
         await runWithLoader('Preparing interview strategy', [
-          'Predicting likely questionsâ€¦',
-          'Finding examples from your pastâ€¦',
-          'Formulating STAR method answersâ€¦',
+          'Predicting likely questions…',
+          'Finding examples from your past…',
+          'Formulating STAR method answers…',
         ], (signal) => api.post(`/api/applications/${id}/interview-prep`, {}, { signal, timeout: 90000 }));
         showToast('Interview flashcards generated.');
         await applicationDetailView(id);
@@ -2550,7 +2550,7 @@ async function applicationDetailView(id) {
       event.preventDefault();
       const body = Object.fromEntries(new FormData(event.currentTarget).entries());
       const submitBtn = document.querySelector('#saveInterviewBtn');
-      const restoreBtn = setBtnLoading(submitBtn, 'Savingâ€¦');
+      const restoreBtn = setBtnLoading(submitBtn, 'Saving…');
 
       try {
         // If they haven't ignored the conflict warning, check for conflict first
@@ -2629,7 +2629,7 @@ function wireSearch(containerSelector) {
         container.appendChild(msg);
       }
     } else {
-      // No query â€” collapse back to limited (shows first 3 via CSS)
+      // No query — collapse back to limited (shows first 3 via CSS)
       container.classList.add('limited');
     }
   });
@@ -2731,7 +2731,7 @@ async function settingsView() {
   document.querySelector('#detailsForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const restore = setBtnLoading(e.submitter, 'Updatingâ€¦');
+    const restore = setBtnLoading(e.submitter, 'Updating…');
     try {
       const data = await api.put('/api/auth/details', Object.fromEntries(new FormData(form)));
       setAuth(data.token, data.user);
@@ -2751,7 +2751,7 @@ async function settingsView() {
   document.querySelector('#passwordForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const restore = setBtnLoading(e.submitter, 'Changingâ€¦');
+    const restore = setBtnLoading(e.submitter, 'Changing…');
     try {
       await api.post('/api/auth/update-password', Object.fromEntries(new FormData(form)));
       showToast('Password changed successfully.');
@@ -2770,7 +2770,7 @@ async function settingsView() {
   document.querySelector('#prefsForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const restore = setBtnLoading(e.submitter, 'Savingâ€¦');
+    const restore = setBtnLoading(e.submitter, 'Saving…');
     try {
       const template = new FormData(form).get('defaultTemplate');
       const prefs = profile.preferences || {};
@@ -2822,7 +2822,7 @@ async function settingsView() {
       
       const confirmBtn = overlay.querySelector('#confirmDeleteBtn');
       confirmBtn.addEventListener('click', async () => {
-        const restore = setBtnLoading(confirmBtn, 'Deletingâ€¦');
+        const restore = setBtnLoading(confirmBtn, 'Deleting…');
         // disable cancel button so user can't abort mid-flight
         overlay.querySelector('#cancelDeleteBtn').disabled = true;
         try {
@@ -2904,7 +2904,7 @@ async function xrayView() {
 
     // The structural checks an ATS parser cares about. Each maps to the risk
     // label(s) that would fail it, so the verdict is derived from the real
-    // analysis â€” a clean scan shows every check ticked, a risky one shows why.
+    // analysis — a clean scan shows every check ticked, a risky one shows why.
     const CHECK_DEFS = [
       { label: 'Text is machine-readable', fails: ['Scanned or image-based PDF (little or no selectable text)', 'Unreadable PDF'] },
       { label: 'Single-column reading order', fails: ['Complex Multi-Column Layout'] },
@@ -2932,7 +2932,7 @@ async function xrayView() {
     const verdictClass = allClear ? 'xray-verdict--pass' : 'xray-verdict--warn';
     const verdictMark = allClear ? markPass : markWarn;
     const verdictTitle = allClear
-      ? 'Clean parse â€” your CV is ATS-ready'
+      ? 'Clean parse — your CV is ATS-ready'
       : `${risks.length} structural risk${risks.length > 1 ? 's' : ''} to review`;
     const verdictSub = allClear
       ? 'Every line was extracted in a single, logical order. An applicant tracking system will read this document exactly the way you laid it out.'
@@ -2969,7 +2969,7 @@ async function xrayView() {
     // Render the PDF with the browser's native viewer by pointing an <iframe>
     // straight at the endpoint. An iframe cannot set Authorization headers, so
     // we first exchange our session for a 60s single-purpose ticket scoped to
-    // this one document â€” the long-lived session JWT never touches a URL.
+    // this one document — the long-lived session JWT never touches a URL.
     const container = document.getElementById('pdfContainer');
     container.innerHTML = '';
     try {
