@@ -45,11 +45,15 @@ The backend is a Node.js and Express REST API. The frontend is a separate vanill
 cv-builder-platform/
 ├── app.js
 ├── config/
-│   └── db.js
+│   ├── db.js
+│   └── upload.js
 ├── controllers/
+│   ├── analyticsController.js
 │   ├── applicationController.js
 │   ├── authController.js
-│   └── profileController.js
+│   ├── interviewController.js
+│   ├── profileController.js
+│   └── xrayController.js
 ├── database/
 │   ├── bootstrap.sql
 │   └── migrations/
@@ -61,23 +65,41 @@ cv-builder-platform/
 │   ├── logger.js
 │   └── rateLimiters.js
 ├── models/
+│   ├── analyticsQuery.js
 │   ├── applicationQuery.js
+│   ├── interviewQuery.js
 │   ├── profileQuery.js
-│   └── userQuery.js
+│   ├── userQuery.js
+│   └── userTablePreferenceQuery.js
 ├── public/
 │   ├── css/
-│   │   └── style.css
+│   │   ├── linter.css
+│   │   ├── redflags.css
+│   │   ├── style.css
+│   │   └── xray.css
+│   ├── favicons/
 │   ├── js/
-│   │   └── app.js
-│   ├── design.html
+│   │   ├── app.js
+│   │   └── dataGrid.js
 │   └── index.html
 ├── routes/
+│   ├── analyticsRoutes.js
 │   ├── applicationRoutes.js
 │   ├── authRoutes.js
-│   └── profileRoutes.js
-└── services/
-    ├── coverLetterPdf.js
-    └── cvPdf.js
+│   ├── interviewRoutes.js
+│   ├── profileRoutes.js
+│   └── xrayRoutes.js
+├── services/
+│   ├── aiClient.js
+│   ├── coverLetterPdf.js
+│   └── cvPdf.js
+├── tests/
+└── utils/
+    ├── atsXray.js
+    ├── cvLinter.js
+    ├── email.js
+    ├── redFlagRules.js
+    └── schemas.js
 ```
 
 ## Setup
@@ -104,15 +126,18 @@ NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_MODEL=qwen/qwen3-next-80b-a3b-instruct
 PORT=3000
 
-# Email Configuration (e.g., Mailtrap for local dev)
-SMTP_HOST=sandbox.smtp.mailtrap.io
-SMTP_PORT=2525
-SMTP_USER=your_mailtrap_user
-SMTP_PASS=your_mailtrap_password
-SMTP_FROM="CV Builder Platform" <no-reply@cvbuilder.com>
+# Email delivery via Resend (https://resend.com). Without a key, recovery
+# emails are not sent; in development the reset link is returned in the API
+# response instead. In production a missing key is logged as an ERROR at boot.
+RESEND_API_KEY=
+RESEND_FROM="CV Builder Platform" <no-reply@cvbuilder.com>
+
+NODE_ENV=development
 ```
 
-The app requires `DATABASE_URL`, `JWT_SECRET`, and `NVIDIA_API_KEY` at startup.
+The app requires `DATABASE_URL`, `JWT_SECRET` (at least 32 characters), and
+`NVIDIA_API_KEY` at startup — it refuses to boot if any of them is missing or
+the JWT secret is too weak.
 
 4. Create the PostgreSQL database tables:
 
@@ -141,6 +166,9 @@ Main route groups:
 - `/api/auth`
 - `/api/profile`
 - `/api/applications`
+- `/api/interviews`
+- `/api/analytics`
+- `/api/xray`
 
 ### Endpoint Summary
 
@@ -149,19 +177,42 @@ Main route groups:
 | GET | `/api/health` | — | Service health check. |
 | POST | `/api/auth/register` | — | Register a user; returns a JWT. |
 | POST | `/api/auth/login` | — | Log in; returns a JWT. |
+| POST | `/api/auth/forgot-password` | — | Email a single-use reset link. |
+| POST | `/api/auth/reset-password` | — | Complete a reset with the emailed token. |
+| POST | `/api/auth/temp-password` | — | Issue a temporary password forcing a change on next login. |
 | GET | `/api/auth/me` | JWT | Return the authenticated user. |
+| PUT | `/api/auth/details` | JWT | Update full name and email. |
+| POST | `/api/auth/update-password` | JWT | Change password (current password required). |
+| DELETE | `/api/auth/me` | JWT | Permanently delete the account. |
 | GET | `/api/profile` | JWT | Get the user's CV profile and template options. |
 | PUT | `/api/profile` | JWT | Save the user's CV profile. |
 | POST | `/api/profile/upload` | JWT | Upload a PDF resume and parse it with AI. |
 | POST | `/api/profile/summary` | JWT | Generate a professional summary with AI. |
+| POST | `/api/profile/lint` | JWT | Rule-based CV lint of raw text. |
 | PUT | `/api/profile/skill-levels` | JWT | Save per-skill proficiency levels. |
 | GET | `/api/profile/cv.pdf` | JWT | Download the CV as a PDF (`?template=modern\|classic\|bold`). |
-| GET | `/api/applications` | JWT | List the user's applications. |
+| GET | `/api/applications` | JWT | List applications (allowlisted sort/filter params). |
 | GET | `/api/applications/stats` | JWT | Get application count and average ATS score. |
+| GET/PUT | `/api/applications/table-preferences` | JWT | Tracker grid column preferences. |
 | POST | `/api/applications` | JWT | Create an application and AI-score it against the CV. |
+| PATCH | `/api/applications/bulk` | JWT | Bulk delete / restore / status update. |
 | GET | `/api/applications/:id` | JWT | Get a single application. |
+| PATCH | `/api/applications/:id` | JWT | Partially update editable fields. |
+| DELETE | `/api/applications/:id` | JWT | Soft-delete an application (undoable). |
 | POST | `/api/applications/:id/cover-letter` | JWT | Generate a cover letter with a selected tone. |
 | GET | `/api/applications/:id/cover-letter.pdf` | JWT | Download the cover letter as a PDF. |
+| POST | `/api/applications/:id/tailor-cv` | JWT | AI-tailor the CV to this job description. |
+| GET | `/api/applications/:id/tailored-cv.pdf` | JWT | Download the tailored CV as a PDF. |
+| POST | `/api/applications/:id/interview-prep` | JWT | Generate STAR-method interview flashcards. |
+| GET/POST | `/api/applications/:appId/interviews` | JWT | List or schedule interviews for an application. |
+| POST | `/api/interviews/check-conflict` | JWT | Check a time window for scheduling conflicts. |
+| GET | `/api/interviews/:id/ics` | JWT | Download an interview as a calendar invite. |
+| GET | `/api/analytics/funnel` | JWT | Application funnel (`?groupBy=channel`). |
+| GET | `/api/xray` | JWT | List stored X-Ray scans (newest 20 kept). |
+| POST | `/api/xray/upload` | JWT | Upload a PDF for ATS parsability analysis. |
+| POST | `/api/xray/:id/pdf-ticket` | JWT | Mint a 60-second ticket for PDF preview. |
+| GET | `/api/xray/:id/pdf` | Ticket | Stream a stored PDF using `?ticket=` (iframe-safe). |
+| DELETE | `/api/xray/:id` | JWT | Delete a stored scan. |
 
 Authenticated routes expect an `Authorization: Bearer <token>` header. Full request
 and response shapes are documented in [docs/API.md](docs/API.md).
@@ -176,7 +227,14 @@ Tables:
 
 - `users`
 - `profiles`
-- `applications`
+- `applications` (+ `application_status_history`)
+- `interviews`
+- `user_table_preferences`
+- `cv_versions`
+
+Funnel analytics count each stage cumulatively: "Interviewing" means an
+application reached interviewing (including those later hired), and
+"Offered/Hired" counts applications that received an offer.
 
 ## Security Notes
 
@@ -193,29 +251,32 @@ Tables:
 
 All requests are logged with method, path, status code, and duration. Application
 events and server errors are logged with levels (`INFO`, `WARN`, `ERROR`). Logs are
-written both to the console and to `logs/app.log`. The `logs/` directory is created
-automatically at startup and is ignored by Git.
+written both to the console and to `logs/app.log`. The active log file rotates to
+`app.log.1` once it exceeds 5 MB, so it can never grow without bound. The `logs/`
+directory is created automatically at startup and is ignored by Git.
 
 ## Design System
 
-The client is a vanilla HTML/CSS/JavaScript single-page app served from `public/`.
-A standalone design-system proof page is available at `/design.html`, showing the
-typography, color tokens, surfaces, buttons, inputs, cards, states, and light/dark
-themes that the rest of the interface is built from.
+The client is a vanilla HTML/CSS/JavaScript single-page app served from `public/`,
+built on a dark-first token system (typography, color tokens, surfaces, buttons,
+inputs, cards, and state styles) defined in `public/css/style.css`.
 
 ## Extra Features Beyond The Basic Requirement
 
-- **Password Recovery/Forgot Password:** Secure token-based temporary password recovery flow with Nodemailer/Mailtrap integration. Automatically mandates users to set a new password upon logging in with their temporary credentials. Includes a fail-safe local dev/demo fallback that prints temporary passwords directly to the console and in-app to prevent blockers during offline grading.
-- **ATS X-Ray Scanner:** Diagnostic tool that parses raw PDFs to check for ATS readability, font extraction issues, and hidden text.
-- **CV Linter & Red Flag Detection:** Rule-based analysis engine to detect common CV mistakes (e.g., missing metrics, generic action verbs, excessive buzzwords).
-- **Comprehensive Testing Suite:** Fully automated unit and integration tests using Jest and Supertest (`npm test`) covering API endpoints and AI utilities.
+- **Password Recovery (two flows):** Email-based reset links with hashed, single-use tokens; plus temporary-password issuance that mandates a credential change within one hour of next login. Delivery uses the Resend HTTP API; without a key in development the link/password is returned in the API response for local testing, and a missing key in production is logged at ERROR level.
+- **ATS X-Ray Scanner:** Diagnostic tool that parses raw PDFs to check for ATS readability, font extraction issues, and hidden text. Stored scans are capped at 20 per user with owner-scoped deletion.
+- **CV Linter & Red Flag Detection:** Rule-based analysis engine to detect common CV mistakes (e.g., missing metrics, generic action verbs) and scam-like job posting language.
+- **Comprehensive Testing Suite:** 80+ automated unit tests using Jest (`npm test`) covering controllers, utilities, validation rules, and AI output schemas.
 - **AI PDF Parsing & Structuring:** Upload a raw PDF resume and let AI extract and structure it into the platform's schema.
 - **AI ATS Matching & Scoring:** Automatically match structured CV data against job descriptions for a granular ATS score.
-- **AI Cover Letter Generation:** Generate tailored cover letters with selectable tones (professional, enthusiastic, direct).
+- **AI Cover Letter Generation:** Generate tailored cover letters with selectable tones (Formal, Confident, Concise).
+- **Tailored CVs & Interview Prep:** AI rewrites CV bullets per job description and predicts interview questions with STAR-method answer strategies.
+- **Excel-style Application Tracker:** Editable grid with custom columns, bulk actions, soft-delete undo, CSV export (formula-injection safe), and status history analytics.
+- **Interview Scheduler:** Schedule rounds with conflict detection and RFC-compliant `.ics` calendar invites.
 - **Multi-template PDF Generation:** Generate tailored CV PDFs and Cover Letter PDFs server-side via PDFKit.
 - **Rate Limiting:** IP-based rate limiting on authentication and AI endpoints to prevent abuse.
-- **Advanced UI/UX System:** Custom dark-first design system featuring a dynamic vanilla-JS SPA, interactive data grids, glassmorphic auth panels, and premium legal compliance pages.
-- **Logging & Monitoring:** Leveled application logging to both console and file.
+- **Advanced UI/UX System:** Custom dark-first design system featuring a dynamic vanilla-JS SPA and interactive data grids.
+- **Logging & Monitoring:** Leveled application logging to console and rotating file.
 - **Detailed Documentation:** Structured API documentation and Database ER diagrams.
 
 ## Scripts
@@ -223,4 +284,5 @@ themes that the rest of the interface is built from.
 ```bash
 npm start
 npm run dev
+npm test
 ```
