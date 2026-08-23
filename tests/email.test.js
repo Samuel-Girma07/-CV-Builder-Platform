@@ -30,3 +30,63 @@ describe('sendResetEmail', () => {
     if (originalKey) process.env.RESEND_API_KEY = originalKey;
   });
 });
+
+describe('sendTempPasswordEmail', () => {
+  test('never logs the plaintext temporary password when Resend is not configured', async () => {
+    const originalKey = process.env.RESEND_API_KEY;
+    delete process.env.RESEND_API_KEY;
+
+    jest.resetModules();
+    const { logger } = require('../middlewares/logger');
+    const infoSpy = jest.spyOn(logger, 'info').mockImplementation(() => {});
+    const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {});
+    const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const { sendTempPasswordEmail: freshSend } = require('../utils/email');
+
+    const wasSent = await freshSend('test@example.com', 'Sup3rSecretTemp');
+
+    expect(wasSent).toBe(false);
+
+    const loggedMessages = [...infoSpy.mock.calls, ...warnSpy.mock.calls, ...errorSpy.mock.calls]
+      .map(call => call[0])
+      .join('\n');
+
+    expect(loggedMessages).toContain('test@example.com');
+    expect(loggedMessages).toContain('NOT configured');
+    expect(loggedMessages).not.toContain('Sup3rSecretTemp');
+
+    infoSpy.mockRestore();
+    warnSpy.mockRestore();
+    errorSpy.mockRestore();
+
+    if (originalKey) process.env.RESEND_API_KEY = originalKey;
+  });
+
+  test('sends the plaintext credential in the email body when configured', async () => {
+    const originalKey = process.env.RESEND_API_KEY;
+    process.env.RESEND_API_KEY = 're_test_key';
+
+    jest.resetModules();
+    const mockSend = jest.fn().mockResolvedValue({ data: { id: 'email-1' }, error: null });
+
+    jest.mock('resend', () => ({
+      Resend: jest.fn().mockImplementation(() => ({ emails: { send: mockSend } })),
+    }));
+    jest.mock('../middlewares/logger', () => ({
+      logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+      requestLogger: jest.fn(),
+    }));
+
+    const { sendTempPasswordEmail } = require('../utils/email');
+    const result = await sendTempPasswordEmail('user@example.com', 'TempPass99');
+
+    expect(result).toBe(true);
+    const payload = mockSend.mock.calls[0][0];
+    expect(payload.to).toBe('user@example.com');
+    expect(payload.text).toContain('TempPass99');
+    expect(payload.html).toContain('TempPass99');
+
+    if (originalKey) process.env.RESEND_API_KEY = originalKey; else delete process.env.RESEND_API_KEY;
+  });
+});

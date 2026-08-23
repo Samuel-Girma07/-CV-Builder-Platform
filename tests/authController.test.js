@@ -8,6 +8,7 @@ jest.mock('../models/userQuery', () => ({
   setResetToken: jest.fn(),
   findByResetToken: jest.fn(),
   completePasswordReset: jest.fn(),
+  setTemporaryPassword: jest.fn(),
 }));
 
 jest.mock('../models/profileQuery', () => ({ upsert: jest.fn(), findByUserId: jest.fn() }));
@@ -18,6 +19,7 @@ jest.mock('../middlewares/logger', () => ({
 }));
 jest.mock('../utils/email', () => ({
   sendResetEmail: jest.fn(),
+  sendTempPasswordEmail: jest.fn(),
   isEmailConfigured: jest.fn(() => true),
 }));
 
@@ -26,7 +28,7 @@ process.env.JWT_SECRET = 'test-secret';
 const jwt = require('jsonwebtoken');
 const authController = require('../controllers/authController');
 const userQuery = require('../models/userQuery');
-const { sendResetEmail } = require('../utils/email');
+const { sendResetEmail, sendTempPasswordEmail, isEmailConfigured } = require('../utils/email');
 
 function mkRes() {
   const captured = { code: 200 }; // express res.json() defaults to 200
@@ -139,5 +141,87 @@ describe('resetPassword', () => {
     const lookupArg = userQuery.findByResetToken.mock.calls[0][0];
     expect(lookupArg).toHaveLength(64);
     expect(lookupArg).not.toBe('abc');
+  });
+});
+
+describe('issueTempPassword (temporary credential issuance)', () => {
+  test('unknown email receives the identical neutral 200 response', async () => {
+    userQuery.findByEmail.mockResolvedValue(null);
+    const res = mkRes();
+
+    await authController.issueTempPassword({ body: { email: 'ghost@example.com' } }, res, jest.fn());
+
+    expect(res._.code).toBe(200);
+    expect(res._.body.message).toMatch(/temporary password has been issued/i);
+    expect(userQuery.setTemporaryPassword).not.toHaveBeenCalled();
+    expect(sendTempPasswordEmail).not.toHaveBeenCalled();
+  });
+
+  test('known email stores only a bcrypt hash and emails the plaintext once', async () => {
+    userQuery.findByEmail.mockResolvedValue({ id: 5, email: 'a@b.co', password_hash: '$2a$12$old' });
+    userQuery.setTemporaryPassword.mockResolvedValue({ id: 5 });
+    sendTempPasswordEmail.mockResolvedValue(true);
+    isEmailConfigured.mockReturnValue(true);
+    const res = mkRes();
+
+    await authController.issueTempPassword({ body: { email: 'A@B.co ' } }, res, jest.fn());
+
+    expect(res._.code).toBe(200);
+    expect(res._.body.devTempPassword).toBeUndefined();
+
+    // Email receives the plaintext exactly once.
+    expect(sendTempPasswordEmail).toHaveBeenCalledTimes(1);
+    const plaintext = sendTempPasswordEmail.mock.calls[0][1];
+
+    // Storage receives a bcrypt hash of that same plaintext plus a ~1h window.
+    const [calledId, storedHash, expiresAt] = userQuery.setTemporaryPassword.mock.calls[0];
+    expect(calledId).toBe(5);
+    expect(storedHash).not.toBe(plaintext);
+    expect(storedHash).toMatch(/^\$2[aby]\$/);
+
+    const deltaMs = new Date(expiresAt).getTime() - Date.now();
+    expect(deltaMs).toBeGreaterThan(55 * 60 * 1000);
+    expect(deltaMs).toBeLessThan(65 * 60 * 1000);
+  });
+
+  test('issued password satisfies the login policy and clears pending reset links', async () => {
+    userQuery.findByEmail.mockResolvedValue({ id: 7, email: 'p@q.rs', password_hash: '$2a$12$old' });
+    userQuery.setTemporaryPassword.mockResolvedValue({ id: 7 });
+    sendTempPasswordEmail.mockResolvedValue(true);
+    isEmailConfigured.mockReturnValue(false); // dev mode surfaces devTempPassword
+    const res = mkRes();
+
+    await authController.issueTempPassword({ body: { email: 'p@q.rs' } }, res, jest.fn());
+
+    const plaintext = res._.body.devTempPassword;
+    expect(plaintext).toBeDefined();
+    expect(plaintext.length).toBeGreaterThanOrEqual(8);
+    expect(plaintext).toMatch(/[A-Z]/);
+    expect(plaintext).toMatch(/[0-9]/);
+
+    // Issuing a temporary credential invalidates any pending reset link.
+    const storedHash = userQuery.setTemporaryPassword.mock.calls[0][1];
+    expect(storedHash).not.toBe(plaintext);
+  });
+
+  test('email failure rolls back to the previous hash so nobody gets locked out', async () => {
+    userQuery.findByEmail.mockResolvedValue({ id: 5, email: 'a@b.co', password_hash: '$2a$12$old' });
+    userQuery.setTemporaryPassword.mockResolvedValue({ id: 5 });
+    userQuery.updatePassword.mockResolvedValue({ id: 5 });
+    sendTempPasswordEmail.mockRejectedValue(new Error('resend down'));
+    const res = mkRes();
+
+    await authController.issueTempPassword({ body: { email: 'a@b.co' } }, res, jest.fn());
+
+    expect(res._.code).toBe(502);
+    expect(res._.body.error).toMatch(/could not send/i);
+    expect(userQuery.updatePassword).toHaveBeenCalledWith(5, '$2a$12$old');
+  });
+
+  test('malformed body is rejected before any lookup', async () => {
+    const res = mkRes();
+    await authController.issueTempPassword({ body: {} }, res, jest.fn());
+    expect(res._.code).toBe(400);
+    expect(userQuery.findByEmail).not.toHaveBeenCalled();
   });
 });

@@ -122,6 +122,22 @@ const userQuery = {
     );
     return result.rows[0] || null;
   },
+
+  /**
+   * Issue a temporary credential: rotate the hash, flag forced change, start
+   * the validity window, and invalidate any pending reset link so exactly one
+   * recovery channel is live at a time.
+   */
+  async setTemporaryPassword(id, passwordHash, expiresAt) {
+    const result = await pool.query(
+      `UPDATE users
+       SET password_hash = $2, must_change_password = true, reset_token = NULL, reset_token_expires = $3
+       WHERE id = $1
+       RETURNING id`,
+      [id, passwordHash, expiresAt]
+    );
+    return result.rows[0] || null;
+  },
 };
 
 module.exports = userQuery;

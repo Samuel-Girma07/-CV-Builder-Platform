@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const userQuery = require('../models/userQuery');
 const profileQuery = require('../models/profileQuery');
 const crypto = require('crypto');
-const { sendResetEmail, isEmailConfigured } = require('../utils/email');
+const { sendResetEmail, sendTempPasswordEmail, isEmailConfigured } = require('../utils/email');
 
 const SALT_ROUNDS = 12;
 const TOKEN_EXPIRES_IN = '24h';
@@ -12,6 +12,27 @@ const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 // enumerate registered accounts.
 const RESET_GENERIC_MESSAGE =
   'If that email address belongs to an account, a password reset link has been sent.';
+const TEMP_PASSWORD_GENERIC_MESSAGE =
+  'If that email address belongs to an account, a temporary password has been issued. Sign in with it within the hour to choose a new one.';
+
+/* Unambiguous character sets (no 0/O/1/l/I) so a emailed credential can be
+   retyped reliably. The generator guarantees at least one upper-case letter
+   and one digit so every issued password satisfies the login policy. */
+const TEMP_UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+const TEMP_LOWER = 'abcdefghijkmnpqrstuvwxyz';
+const TEMP_DIGITS = '23456789';
+const TEMP_ALL = TEMP_UPPER + TEMP_LOWER + TEMP_DIGITS;
+
+function generateTemporaryPassword(length = 12) {
+  const pick = (set) => set[crypto.randomInt(set.length)];
+  const chars = [pick(TEMP_UPPER), pick(TEMP_LOWER), pick(TEMP_DIGITS)];
+  while (chars.length < length) chars.push(pick(TEMP_ALL));
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join('');
+}
 
 function hashResetToken(rawToken) {
   return crypto.createHash('sha256').update(rawToken).digest('hex');
@@ -306,6 +327,57 @@ const authController = {
         token: signToken(updated),
         user: publicUser(updated),
       });
+    } catch (err) {
+      return next(err);
+    }
+  },
+
+  /**
+   * Issue a temporary password that forces a credential change on next login.
+   * Public like forgot-password (rate limited) so an expired temporary
+   * credential can always be replaced; every outcome shares one response.
+   */
+  async issueTempPassword(req, res, next) {
+    try {
+      const { email } = req.body;
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({ error: 'Email is required.' });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      const user = await userQuery.findByEmail(normalizedEmail);
+
+      if (user) {
+        const tempPassword = generateTemporaryPassword();
+        const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+        const previousHash = user.password_hash;
+
+        await userQuery.setTemporaryPassword(
+          user.id,
+          await bcrypt.hash(tempPassword, SALT_ROUNDS),
+          expiresAt
+        );
+
+        try {
+          await sendTempPasswordEmail(user.email, tempPassword);
+        } catch (emailErr) {
+          // Roll the rotation back so the previous credential keeps working —
+          // a failed email must never lock anyone out.
+          await userQuery.updatePassword(user.id, previousHash).catch(() => {});
+          return res.status(502).json({
+            error: 'We could not send the temporary password right now. Please try again shortly.',
+          });
+        }
+
+        if (!isEmailConfigured() && process.env.NODE_ENV !== 'production') {
+          return res.json({
+            message: TEMP_PASSWORD_GENERIC_MESSAGE,
+            devTempPassword: tempPassword,
+          });
+        }
+      }
+
+      return res.json({ message: TEMP_PASSWORD_GENERIC_MESSAGE });
     } catch (err) {
       return next(err);
     }

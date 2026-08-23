@@ -844,7 +844,7 @@ async function updatePasswordView() {
                 New Local Demo Mode Password:
               </div>
               <div style="color: var(--muted); margin-bottom: 8px; font-size: 12px; line-height: 1.4;">
-                SMTP is not configured. Here is the new temporary password:
+                Email delivery is not configured. Here is the new temporary password:
               </div>
               <div style="display: flex; gap: 8px; align-items: center;">
                 <input id="resendDevLinkInput" readonly style="flex: 1; font-size: 12px; padding: 6px 10px; background: var(--surface-3); border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text);" />
@@ -898,23 +898,58 @@ async function updatePasswordView() {
     timerInterval = setInterval(updateTimer, 1000);
   }
 
+  const showDevTempPassword = (value) => {
+    const devContainer = document.getElementById('resendDevLinkContainer');
+    if (!devContainer) return;
+    devContainer.style.display = 'block';
+    const input = document.getElementById('resendDevLinkInput');
+    const copyBtn = document.getElementById('resendDevLinkCopy');
+    if (input) {
+      input.value = value;
+      input.focus();
+      input.select();
+    }
+    if (copyBtn) {
+      copyBtn.onclick = () => {
+        navigator.clipboard?.writeText(value).catch(() => {
+          if (input) { input.select(); document.execCommand('copy'); }
+        });
+        showToast('Copied to clipboard.');
+      };
+    }
+  };
+
   resendBtn.addEventListener('click', async () => {
-    const restore = setBtnLoading(resendBtn, 'Resendingâ€¦');
-    const devLinkContainer = document.getElementById('resendDevLinkContainer');
-    if (devLinkContainer) devLinkContainer.style.display = 'none';
+    const restore = setBtnLoading(resendBtn, 'Resending…');
+    const devContainer = document.getElementById('resendDevLinkContainer');
+    if (devContainer) devContainer.style.display = 'none';
 
     try {
-      const res = await api.post('/api/auth/forgot-password', { email: state.user.email });
-      const meRes = await api.get('/api/auth/me');
-      setAuth(state.token, meRes.user);
-      showToast('Reset link sent. Check your email to continue.');
+      const res = await api.post('/api/auth/temp-password', { email: state.user.email });
+      const sessionExpired =
+        state.user.resetTokenExpires && new Date(state.user.resetTokenExpires) <= new Date();
 
-      if (timerInterval) clearInterval(timerInterval);
-      
-      // Update timer in place without losing the devTempPassword UI by re-rendering the whole view
-      updateTimer();
-      timerInterval = setInterval(updateTimer, 1000);
-      
+      if (!sessionExpired) {
+        const meRes = await api.get('/api/auth/me');
+        setAuth(state.token, meRes.user);
+
+        // Restart the countdown against the freshly issued window without
+        // losing the dev-temp-password UI to a full view re-render.
+        if (timerInterval) clearInterval(timerInterval);
+        updateTimer();
+        timerInterval = setInterval(updateTimer, 1000);
+      }
+
+      if (res.devTempPassword) {
+        showDevTempPassword(res.devTempPassword);
+        showToast(sessionExpired ? 'Sign in with this temporary password.' : 'Temporary password issued below.', 'info');
+      } else {
+        showToast('If that address belongs to an account, a temporary password has been sent.', 'info');
+      }
+
+      if (sessionExpired) {
+        setTimeout(() => { clearAuth(); authView(); }, res.devTempPassword ? 8000 : 1500);
+      }
     } catch (err) {
       showToast(err.message, 'error');
     } finally {

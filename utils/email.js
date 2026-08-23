@@ -66,7 +66,57 @@ async function sendResetEmail(toEmail, resetToken) {
   return false;
 }
 
+/**
+ * Send a temporary password via Resend HTTP API.
+ * The plaintext credential travels ONLY inside the email body and is never
+ * logged; the database stores only its bcrypt hash.
+ * @param {string} toEmail - Recipient email
+ * @param {string} tempPassword - Plaintext temporary password
+ * @returns {Promise<boolean>} - True if sent, false when no provider configured
+ */
+async function sendTempPasswordEmail(toEmail, tempPassword) {
+  if (resend) {
+    logger.info(`Attempting to send temporary password email to: ${toEmail}...`);
+    try {
+      const { data, error } = await resend.emails.send({
+        from: process.env.RESEND_FROM || 'CV Builder Platform <onboarding@resend.dev>',
+        to: toEmail,
+        subject: 'Your Temporary Password - CV Builder Platform',
+        text: `A temporary password was issued for your account:\n\n${tempPassword}\n\nSign in with it within 1 hour — you will be required to choose a new password immediately. If you did not request this, contact support.`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+            <h2 style="color: #4a5568; text-align: center;">Your Temporary Password</h2>
+            <p>A temporary password was issued for your CV Builder Platform account.</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <code style="background-color: #edf2f7; color: #2d3748; padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 18px; letter-spacing: 1px;">${tempPassword}</code>
+            </div>
+            <p>Sign in with it within <strong>1 hour</strong> — you will be asked to choose a new password immediately.</p>
+            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
+            <p style="color: #a0aec0; font-size: 12px;">If you did not request a temporary password, contact support right away.</p>
+          </div>
+        `,
+      });
+
+      if (error) {
+        logger.error(`RESEND API ERROR: ${JSON.stringify(error)}`);
+        throw new Error(`Email delivery failed: ${error.message || JSON.stringify(error)}`);
+      }
+
+      logger.info(`Temporary password email sent successfully to: ${toEmail}. ID: ${data.id}`);
+      return true;
+    } catch (err) {
+      logger.error(`Error sending email via Resend: ${err.message}`);
+      throw err;
+    }
+  }
+
+  // The plaintext temporary password must NEVER be logged or echoed anywhere.
+  logger.warn(`Email delivery is NOT configured (RESEND_API_KEY missing). Temporary password email to ${toEmail} was NOT sent.`);
+  return false;
+}
+
 module.exports = {
   sendResetEmail,
+  sendTempPasswordEmail,
   isEmailConfigured,
 };
