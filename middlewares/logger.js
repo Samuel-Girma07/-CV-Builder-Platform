@@ -42,7 +42,8 @@ function requestLogger(req, res, next) {
   res.on('finish', () => {
     const duration = Date.now() - startedAt;
     const level = res.statusCode >= 500 ? 'ERROR' : 'INFO';
-    write(level, `${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`);
+    // Path only: query strings can carry one-time tickets or credentials.
+    write(level, `${req.method} ${req.baseUrl || ''}${req.path} ${res.statusCode} ${duration}ms`);
   });
   next();
 }
