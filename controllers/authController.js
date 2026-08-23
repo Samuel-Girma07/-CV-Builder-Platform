@@ -73,6 +73,18 @@ function signToken(user) {
   );
 }
 
+/* Unknown accounts skip the real bcrypt.compare, so response time would leak
+   which emails exist. A comparison against an equally expensive dummy hash
+   keeps both branches indistinguishable by timing. */
+let dummyHashPromise = null;
+async function equalizeLoginTiming(password) {
+  if (!dummyHashPromise) {
+    dummyHashPromise = bcrypt.hash('timing-equalizer-not-a-real-password', SALT_ROUNDS);
+  }
+  const hash = await dummyHashPromise;
+  await bcrypt.compare(password, hash);
+}
+
 const authController = {
   async register(req, res, next) {
     try {
@@ -149,6 +161,7 @@ const authController = {
 
       const user = await userQuery.findByEmail(email.toLowerCase().trim());
       if (!user) {
+        await equalizeLoginTiming(password);
         return res.status(401).json({ error: 'Invalid email or password.' });
       }
 

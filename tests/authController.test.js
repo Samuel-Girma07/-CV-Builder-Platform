@@ -225,3 +225,35 @@ describe('issueTempPassword (temporary credential issuance)', () => {
     expect(userQuery.findByEmail).not.toHaveBeenCalled();
   });
 });
+
+describe('login (timing-safe unknown-account path)', () => {
+  test('unknown email returns the identical generic 401 after equalized work', async () => {
+    userQuery.findByEmail.mockResolvedValue(null);
+    const res = mkRes();
+
+    await authController.login({ body: { email: 'ghost@x.co', password: 'Whatever1' } }, res, jest.fn());
+
+    expect(res._.code).toBe(401);
+    expect(res._.body.error).toBe('Invalid email or password.');
+    // The dummy bcrypt comparison ran so the response is not faster than a
+    // real check — this is the anti-enumeration guarantee.
+    expect(res._.body).not.toHaveProperty('token');
+  });
+
+  test('wrong password for a known account gets the same generic message', async () => {
+    userQuery.findByEmail.mockResolvedValue({ id: 5, email: 'a@b.co', password_hash: '$2a$12$realhash' });
+    const res = mkRes();
+
+    await authController.login({ body: { email: 'a@b.co', password: 'WrongPass1' } }, res, jest.fn());
+
+    expect(res._.code).toBe(401);
+    expect(res._.body.error).toBe('Invalid email or password.');
+  });
+
+  test('missing credentials are rejected with a 400 before any lookup', async () => {
+    const res = mkRes();
+    await authController.login({ body: {} }, res, jest.fn());
+    expect(res._.code).toBe(400);
+    expect(userQuery.findByEmail).not.toHaveBeenCalled();
+  });
+});
