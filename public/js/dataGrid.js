@@ -503,18 +503,25 @@ async function addCustomColumn() {
   }
 }
 
+/* Quote a value for RFC 4180 CSV while neutralizing spreadsheet formula
+   injection: cells beginning with = + - @ or a tab/CR would otherwise execute
+   as formulas when opened in Excel. A leading apostrophe defuses them. */
+function csvCell(raw) {
+  let val = String(raw);
+  if (/^[=+\-@\t\r]/.test(val)) val = "'" + val;
+  return '"' + val.replace(/"/g, '""') + '"';
+}
+
 function exportCSV() {
   const cols = getGridColumns().filter(c => c.id !== '_select');
-  let csv = cols.map(c => '"' + String(c.label).replace(/"/g, '""') + '"').join(',') + '\n';
-  
+  const lines = [cols.map(c => csvCell(c.label)).join(',')];
+
   gridState.data.forEach(row => {
-    csv += cols.map(c => {
-      const val = String(getCellValue(row, c.id)).replace(/"/g, '""');
-      return '"' + val + '"';
-    }).join(',') + '\n';
+    lines.push(cols.map(c => csvCell(getCellValue(row, c.id))).join(','));
   });
-  
-  const blob = new Blob([csv], { type: 'text/csv' });
+
+  // UTF-8 BOM so Excel renders accented characters instead of mojibake.
+  const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
