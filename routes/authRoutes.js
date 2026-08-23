@@ -12,6 +12,7 @@ router.put('/details', authLimiter, authMiddleware, authController.updateDetails
 router.post('/update-password', authLimiter, authMiddleware, authController.updatePassword);
 router.delete('/me', authLimiter, authMiddleware, authController.deleteAccount);
 router.post('/forgot-password', authLimiter, authController.forgotPassword);
+router.post('/reset-password', authLimiter, authController.resetPassword);
 
 
 module.exports = router;

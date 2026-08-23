@@ -4,9 +4,10 @@ const profileQuery = {
   /**
    * Create or update a profile's parsed_json_data for a user.
    * Uses UPSERT (INSERT ... ON CONFLICT UPDATE) since user_id is UNIQUE.
+   * Accepts an optional transaction client (see userQuery.create).
    */
-  async upsert(userId, parsedJsonData) {
-    const result = await pool.query(
+  async upsert(userId, parsedJsonData, client = pool) {
+    const result = await client.query(
       `INSERT INTO profiles (user_id, parsed_json_data, updated_at)
        VALUES ($1, $2, CURRENT_TIMESTAMP)
        ON CONFLICT (user_id)

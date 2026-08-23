@@ -3,9 +3,11 @@ const pool = require('../config/db');
 const userQuery = {
   /**
    * Create a new user with hashed password.
+   * Accepts an optional transaction client so caller can bundle the profile
+   * upsert atomically; defaults to the shared pool.
    */
-  async create(email, passwordHash, fullName) {
-    const result = await pool.query(
+  async create(email, passwordHash, fullName, client = pool) {
+    const result = await client.query(
       `INSERT INTO users (email, password_hash, full_name)
        VALUES ($1, $2, $3)
        RETURNING id, email, full_name, created_at`,
@@ -78,42 +80,45 @@ const userQuery = {
   },
 
   /**
-   * Set a temporary password flag and expiration for a user.
+   * Store a hashed reset token with an expiry. Deliberately does NOT touch
+   * password_hash: the current credential stays valid until a reset completes.
    */
-  async setTemporaryPassword(id, passwordHash, expiresAt) {
+  async setResetToken(id, tokenHash, expiresAt) {
     const result = await pool.query(
       `UPDATE users
-       SET password_hash = $2, must_change_password = true, reset_token_expires = $3
+       SET reset_token = $2, reset_token_expires = $3
        WHERE id = $1
        RETURNING id`,
-      [id, passwordHash, expiresAt]
+      [id, tokenHash, expiresAt]
     );
     return result.rows[0] || null;
   },
 
   /**
    * Find a user with a valid, non-expired reset token.
+   * Callers pass the SHA-256 hash, never the raw token.
    */
-  async findByResetToken(token) {
+  async findByResetToken(tokenHash) {
     const result = await pool.query(
-      `SELECT id, email, password_hash, full_name, created_at
+      `SELECT id, email, full_name, created_at, must_change_password, reset_token_expires
        FROM users
        WHERE reset_token = $1 AND reset_token_expires > NOW()`,
-      [token]
+      [tokenHash]
     );
     return result.rows[0] || null;
   },
 
   /**
-   * Clear the reset token and expiration for a user.
+   * Finish a reset in one statement: swap the password hash, clear the token,
+   * and drop any legacy temporary-password flag.
    */
-  async clearResetToken(id) {
+  async completePasswordReset(id, passwordHash) {
     const result = await pool.query(
       `UPDATE users
-       SET reset_token = NULL, reset_token_expires = NULL
+       SET password_hash = $2, reset_token = NULL, reset_token_expires = NULL, must_change_password = false
        WHERE id = $1
-       RETURNING id`,
-      [id]
+       RETURNING id, email, full_name, created_at, must_change_password, reset_token_expires`,
+      [id, passwordHash]
     );
     return result.rows[0] || null;
   },

@@ -3,10 +3,32 @@ const jwt = require('jsonwebtoken');
 const userQuery = require('../models/userQuery');
 const profileQuery = require('../models/profileQuery');
 const crypto = require('crypto');
-const { sendResetEmail } = require('../utils/email');
+const { sendResetEmail, isEmailConfigured } = require('../utils/email');
 
 const SALT_ROUNDS = 12;
 const TOKEN_EXPIRES_IN = '24h';
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+// One identical response for every outcome so the endpoint cannot be used to
+// enumerate registered accounts.
+const RESET_GENERIC_MESSAGE =
+  'If that email address belongs to an account, a password reset link has been sent.';
+
+function hashResetToken(rawToken) {
+  return crypto.createHash('sha256').update(rawToken).digest('hex');
+}
+
+function passwordPolicyError(newPassword) {
+  if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8) {
+    return 'New password must be at least 8 characters.';
+  }
+  if (!/[A-Z]/.test(newPassword)) {
+    return 'New password needs an uppercase letter.';
+  }
+  if (!/[0-9]/.test(newPassword)) {
+    return 'New password needs a number.';
+  }
+  return null;
+}
 
 function publicUser(user) {
   return {
@@ -61,28 +83,31 @@ const authController = {
       }
 
       const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+      const pool = require('../config/db');
       let user;
       try {
-        user = await userQuery.create(normalizedEmail, passwordHash, fullName.trim());
+        user = await pool.withTransaction(async (tx) => {
+          const created = await userQuery.create(normalizedEmail, passwordHash, fullName.trim(), tx);
+          await profileQuery.upsert(created.id, {
+            personalInfo: {
+              fullName: created.full_name,
+              email: created.email,
+            },
+            careerPreferences: {},
+            skills: [],
+            projects: [],
+            experience: [],
+            education: [],
+            certifications: [],
+          }, tx);
+          return created;
+        });
       } catch (err) {
         if (err.code === '23505') {
           return res.status(409).json({ error: 'An account with that email already exists.' });
         }
         throw err;
       }
-
-      await profileQuery.upsert(user.id, {
-        personalInfo: {
-          fullName: user.full_name,
-          email: user.email,
-        },
-        careerPreferences: {},
-        skills: [],
-        projects: [],
-        experience: [],
-        education: [],
-        certifications: [],
-      });
 
       return res.status(201).json({
         token: signToken(user),
@@ -210,29 +235,76 @@ const authController = {
   async forgotPassword(req, res, next) {
     try {
       const { email } = req.body;
-      if (!email) {
+      if (!email || typeof email !== 'string') {
         return res.status(400).json({ error: 'Email is required.' });
       }
 
-      const user = await userQuery.findByEmail(email.toLowerCase().trim());
-      if (!user) {
-        return res.status(404).json({ error: 'Email address not found in our system.' });
+      const normalizedEmail = email.toLowerCase().trim();
+      const user = await userQuery.findByEmail(normalizedEmail);
+
+      if (user) {
+        const rawToken = crypto.randomBytes(32).toString('hex');
+        const tokenHash = hashResetToken(rawToken);
+        const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+
+        // Store only the hash; the current password keeps working until the
+        // reset is completed, so a failed email can never lock anyone out.
+        await userQuery.setResetToken(user.id, tokenHash, expiresAt);
+
+        try {
+          await sendResetEmail(user.email, rawToken);
+        } catch (emailErr) {
+          return res.status(502).json({
+            error: 'We could not send the reset email right now. Please try again shortly.',
+          });
+        }
+
+        if (!isEmailConfigured() && process.env.NODE_ENV !== 'production') {
+          const base = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+          return res.json({
+            message: RESET_GENERIC_MESSAGE,
+            devResetLink: `${base.replace(/\/+$/, '')}/#/reset-password?token=${rawToken}`,
+          });
+        }
       }
 
-      const tempPassword = crypto.randomBytes(4).toString('hex'); // 8 characters
-      const passwordHash = await bcrypt.hash(tempPassword, SALT_ROUNDS);
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+      return res.json({ message: RESET_GENERIC_MESSAGE });
+    } catch (err) {
+      return next(err);
+    }
+  },
 
-      await userQuery.setTemporaryPassword(user.id, passwordHash, expiresAt);
+  async resetPassword(req, res, next) {
+    try {
+      const { token, newPassword } = req.body;
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ error: 'A reset token is required.' });
+      }
 
-      try {
-        await sendResetEmail(user.email, tempPassword);
-      } catch (emailErr) {
-        return res.status(502).json({ error: 'Password was reset but the email could not be delivered. Please try again or contact support.' });
+      const policyError = passwordPolicyError(newPassword);
+      if (policyError) {
+        return res.status(400).json({ error: policyError });
+      }
+
+      const user = await userQuery.findByResetToken(hashResetToken(token));
+      if (!user) {
+        return res.status(400).json({
+          error: 'This reset link is invalid or has expired. Please request a new one.',
+        });
+      }
+
+      const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+      const updated = await userQuery.completePasswordReset(user.id, passwordHash);
+      if (!updated) {
+        return res.status(400).json({
+          error: 'This reset link is invalid or has expired. Please request a new one.',
+        });
       }
 
       return res.json({
-        message: 'A temporary password has been sent to your email address.',
+        message: 'Password updated successfully. You are now signed in.',
+        token: signToken(updated),
+        user: publicUser(updated),
       });
     } catch (err) {
       return next(err);
