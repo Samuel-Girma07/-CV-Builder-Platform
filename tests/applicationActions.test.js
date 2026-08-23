@@ -20,6 +20,7 @@ jest.mock('../models/applicationQuery', () => ({
   bulkRestore: jest.fn(),
   findById: jest.fn(),
   delete: jest.fn(),
+  findAllSorted: jest.fn(),
 }));
 jest.mock('../models/profileQuery', () => ({ findByUserId: jest.fn(), upsert: jest.fn() }));
 jest.mock('../models/userTablePreferenceQuery', () => ({ get: jest.fn(), upsert: jest.fn() }));
@@ -177,6 +178,47 @@ describe('create compensating delete (P1-11)', () => {
     expect(applicationQuery.delete).not.toHaveBeenCalled();
     // Owner-scoped score update (regression guard for the new signature)
     expect(applicationQuery.updateAtsScore).toHaveBeenCalledWith(78, 3, 88, ['k8s']);
+  });
+});
+
+describe('getList pagination passthrough (deferred item)', () => {
+  test('forwards page params and returns the full pagination envelope', async () => {
+    applicationQuery.findAllSorted.mockResolvedValue({
+      rows: [{ id: 1 }], total: 42, page: 2, pageSize: 10,
+    });
+    const res = mkRes();
+
+    await applicationController.getList(
+      { user: USER, query: { sort: 'created_at', order: 'desc', page: '2', pageSize: '10', q: 'rust' } },
+      res,
+      jest.fn()
+    );
+
+    expect(applicationQuery.findAllSorted).toHaveBeenCalledWith(3, {
+      sort: 'created_at', order: 'desc', q: 'rust', page: '2', pageSize: '10', filters: {},
+    });
+    expect(res._.body).toEqual({
+      applications: [{ id: 1 }],
+      total: 42,
+      page: 2,
+      pageSize: 10,
+    });
+  });
+
+  test('filter_ prefixed params are collected, everything else dropped', async () => {
+    applicationQuery.findAllSorted.mockResolvedValue({ rows: [], total: 0, page: 1, pageSize: 25 });
+    const res = mkRes();
+
+    await applicationController.getList(
+      { user: USER, query: { filter_status: 'Applied', banana: 'yes' } },
+      res,
+      jest.fn()
+    );
+
+    expect(applicationQuery.findAllSorted).toHaveBeenCalledWith(3, {
+      sort: undefined, order: undefined, q: undefined, page: undefined, pageSize: undefined,
+      filters: { status: 'Applied' },
+    });
   });
 });
 

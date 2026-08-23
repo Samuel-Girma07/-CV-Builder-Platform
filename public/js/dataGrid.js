@@ -5,6 +5,9 @@ let gridState = {
   sortDir: 'desc',
   filters: {},
   searchQ: '',
+  page: 1,
+  pageSize: 25,
+  total: 0,
   selectedIds: new Set(),
   editing: null, // { id, field }
   lastDeleted: null, // { ids: [...], data: [...] } — restorable via bulk 'restore'
@@ -53,20 +56,27 @@ function getCellValue(row, colId) {
 }
 
 async function renderDataGrid() {
-  const query = new URLSearchParams({ sort: gridState.sortCol, order: gridState.sortDir });
+  const query = new URLSearchParams({
+    sort: gridState.sortCol,
+    order: gridState.sortDir,
+    page: String(gridState.page),
+    pageSize: String(gridState.pageSize),
+  });
   if (gridState.searchQ) query.append('q', gridState.searchQ);
   for (const [k, v] of Object.entries(gridState.filters)) {
     if (v) query.append('filter_' + k, v);
   }
-  
+
   shell('<div style="padding:20px;">Loading grid...</div>');
-  
+
   try {
     const [dataRes, prefsRes] = await Promise.all([
       api.get('/api/applications?' + query.toString()),
       api.get('/api/applications/table-preferences')
     ]);
     gridState.data = dataRes.applications;
+    gridState.total = Number(dataRes.total || 0);
+    gridState.page = Number(dataRes.page || 1);
     gridState.prefs = prefsRes.preferences || { column_order: [], hidden_columns: [], custom_column_defs: [] };
     // Drop selections that no longer match visible rows so filters/sorts can
     // never leave hidden rows silently selected for bulk actions.
@@ -172,11 +182,17 @@ function drawGrid() {
       return `<tr class="${selected ? 'selected' : ''}" style="${rowStyle}">${tds}${actionTd}</tr>`;
     }).join('');
 
+  const totalPages = Math.max(1, Math.ceil(gridState.total / gridState.pageSize));
   const toolbarHtml = `
     <div class="grid-toolbar">
       <h2>Applications Tracker</h2>
       <input type="search" id="gridSearch" value="${escapeHtml(gridState.searchQ)}" placeholder="Search title, company, description…" aria-label="Search applications" style="max-width:260px;">
       <span style="flex:1"></span>
+      <nav class="pager" aria-label="Pagination">
+        <button class="btn ghost" id="pgPrev" ${gridState.page <= 1 ? 'disabled' : ''} aria-label="Previous page">← Prev</button>
+        <span class="pager-info">Page ${gridState.page} of ${totalPages} · ${gridState.total} total</span>
+        <button class="btn ghost" id="pgNext" ${gridState.page >= totalPages ? 'disabled' : ''} aria-label="Next page">Next →</button>
+      </nav>
       <button class="btn" id="btnExportCSV">Export CSV</button>
       <button class="btn" id="btnAddColumn">Add Custom Column</button>
       <button class="btn primary" id="btnNewApp">New Application</button>
@@ -228,6 +244,7 @@ function attachGridEvents() {
         gridState.sortCol = col;
         gridState.sortDir = 'desc';
       }
+      gridState.page = 1;
       renderDataGrid();
     });
   });
@@ -236,12 +253,14 @@ function attachGridEvents() {
   document.querySelectorAll('input[data-filter], select[data-filter]').forEach(inp => {
     inp.addEventListener('change', (e) => {
       gridState.filters[inp.dataset.filter] = e.target.value.trim();
+      gridState.page = 1;
       renderDataGrid();
     });
     if (inp.tagName === 'INPUT') {
       inp.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           gridState.filters[inp.dataset.filter] = e.target.value.trim();
+          gridState.page = 1;
           renderDataGrid();
         }
       });
@@ -364,10 +383,17 @@ function attachGridEvents() {
       clearTimeout(searchTimer);
       searchTimer = setTimeout(() => {
         gridState.searchQ = gridSearch.value.trim();
+        gridState.page = 1; // new result set — always start at page one
         renderDataGrid();
       }, 350);
     });
   }
+
+  // Pagination
+  const pgPrev = document.getElementById('pgPrev');
+  const pgNext = document.getElementById('pgNext');
+  if (pgPrev) pgPrev.addEventListener('click', () => { gridState.page -= 1; renderDataGrid(); });
+  if (pgNext) pgNext.addEventListener('click', () => { gridState.page += 1; renderDataGrid(); });
 
   // Buttons
   document.getElementById('btnNewApp')?.addEventListener('click', () => {

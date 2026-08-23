@@ -7,8 +7,24 @@ const UPDATABLE_FIELDS = ['job_title', 'company', 'job_description', 'status', '
 // Must stay in sync with the applications_status_allowed CHECK constraint.
 const STATUS_VALUES = ['Applied', 'Interviewing', 'Offered/Hired', 'Rejected'];
 
+const DEFAULT_PAGE_SIZE = 25;
+const MAX_PAGE_SIZE = 100;
+
+/** Parse + clamp untrusted pagination params into safe integers. */
+function parsePagination(page, pageSize) {
+  const sizeRaw = parseInt(pageSize, 10);
+  const pageRaw = parseInt(page, 10);
+  return {
+    pageSize: Number.isFinite(sizeRaw) ? Math.min(Math.max(sizeRaw, 1), MAX_PAGE_SIZE) : DEFAULT_PAGE_SIZE,
+    page: Number.isFinite(pageRaw) ? Math.max(pageRaw, 1) : 1,
+  };
+}
+
 const applicationQuery = {
   STATUS_VALUES,
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+  parsePagination,
 
   /**
    * Create a new application row with job details.
@@ -152,12 +168,15 @@ const applicationQuery = {
   },
 
   /**
-   * Get all applications with optional sorting, filtering, and full-text
-   * search. Only columns on the allowlist can be used for sort/filter; the
-   * `q` term is matched against the generated tsvector via parameterized
-   * websearch_to_tsquery, so user input never touches SQL text.
+   * Get a page of applications with optional sorting, filtering, and
+   * full-text search. Only columns on the allowlist can be used for
+   * sort/filter; `q` is matched via parameterized websearch_to_tsquery and
+   * pagination is clamped server-side. Each row carries COUNT(*) OVER() so
+   * the total is computed in the same pass — no second query.
+   * @returns {{ rows: Array, total: number, page: number, pageSize: number }}
    */
-  async findAllSorted(userId, { sort, order, q, filters } = {}) {
+  async findAllSorted(userId, { sort, order, q, filters, page, pageSize } = {}) {
+    const { page: safePage, pageSize: safeSize } = parsePagination(page, pageSize);
     const params = [userId];
     let where = 'WHERE user_id = $1 AND deleted_at IS NULL';
 
@@ -184,11 +203,23 @@ const applicationQuery = {
       orderClause = `ORDER BY ${sort} ${dir}`;
     }
 
+    params.push(safeSize);
+    const limitIdx = params.length;
+    params.push((safePage - 1) * safeSize);
+
     const result = await pool.query(
-      `SELECT * FROM applications ${where} ${orderClause}`,
+      `SELECT *, COUNT(*) OVER()::int AS total_count
+       FROM applications ${where} ${orderClause}
+       LIMIT $${limitIdx} OFFSET $${limitIdx + 1}`,
       params
     );
-    return result.rows;
+
+    return {
+      rows: result.rows,
+      total: result.rows.length ? Number(result.rows[0].total_count) : 0,
+      page: safePage,
+      pageSize: safeSize,
+    };
   },
 
   /**
@@ -306,3 +337,4 @@ const applicationQuery = {
 };
 
 module.exports = applicationQuery;
+module.exports.parsePagination = parsePagination;

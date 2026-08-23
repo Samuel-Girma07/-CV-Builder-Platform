@@ -46,15 +46,20 @@ const applicationController = {
 
   async getList(req, res, next) {
     try {
-      const { sort, order, q, ...filterParams } = req.query;
+      const { sort, order, q, page, pageSize, ...filterParams } = req.query;
       const filters = {};
       for (const [key, val] of Object.entries(filterParams)) {
         if (key.startsWith('filter_')) {
           filters[key.replace('filter_', '')] = val;
         }
       }
-      const applications = await applicationQuery.findAllSorted(req.user.id, { sort, order, q, filters });
-      return res.json({ applications });
+      const result = await applicationQuery.findAllSorted(req.user.id, { sort, order, q, page, pageSize, filters });
+      return res.json({
+        applications: result.rows,
+        total: result.total,
+        page: result.page,
+        pageSize: result.pageSize,
+      });
     } catch (err) {
       return next(err);
     }
