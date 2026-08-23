@@ -608,7 +608,7 @@ function authView(mode = 'login') {
   document.querySelector('#authForm').addEventListener('submit', async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
-    
+
     if (isRegister) {
       const checkbox = form.querySelector('#termsAgree');
       if (!checkbox || !checkbox.checked) {
@@ -618,33 +618,79 @@ function authView(mode = 'login') {
     }
 
     const body = Object.fromEntries(new FormData(form).entries());
-    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), isRegister ? 'Creating…' : 'Signing in…');
+    const restore = setBtnLoading(form.querySelector('button[type="submit"]'), isRegister ? 'Creating account…' : 'Signing in…');
     try {
       const data = await api.post(`/api/auth/${isRegister ? 'register' : 'login'}`, body);
-      setAuth(data.token, data.user);
-      if (isRegister) {
-        sessionStorage.setItem('just_registered', '1');
+      if (data.twoFactorRequired) {
+        restore();
+        authView.showTotpStep(body.email, body.password);
+        return;
       }
-
-      let target = 'dashboard';
-      try {
-        const saved = sessionStorage.getItem('cv_post_login_redirect');
-        sessionStorage.removeItem('cv_post_login_redirect');
-        const blocked = ['login', 'register', 'forgot-password', 'reset-password', 'update-password', 'terms', 'privacy'];
-        if (saved && !blocked.includes(saved)) target = saved;
-      } catch (err) { /* storage unavailable */ }
-
-      if (data.requirePasswordChange) {
-        navigate('update-password');
-      } else {
-        navigate(target);
-      }
-      await render();
+      await finishLogin(data);
     } catch (err) {
       showToast(err.message, 'error');
       restore();
     }
   });
+
+  /* Shared post-login: session storage, forced-change routing, redirect. */
+  async function finishLogin(data) {
+    setAuth(data.token, data.user);
+    if (isRegister) {
+      sessionStorage.setItem('just_registered', '1');
+    }
+
+    let target = 'dashboard';
+    try {
+      const saved = sessionStorage.getItem('cv_post_login_redirect');
+      sessionStorage.removeItem('cv_post_login_redirect');
+      const blocked = ['login', 'register', 'forgot-password', 'reset-password', 'update-password', 'terms', 'privacy'];
+      if (saved && !blocked.includes(saved)) target = saved;
+    } catch (err) { /* storage unavailable */ }
+
+    if (data.requirePasswordChange) {
+      navigate('update-password');
+    } else {
+      navigate(target);
+    }
+    await render();
+  }
+
+  // Exposed for the two-factor step below.
+  authView.finishLogin = finishLogin;
+
+  // Two-factor challenge: swap the card body for a 6-digit code entry.
+  authView.showTotpStep = (email, password) => {
+    const cardBody = document.querySelector('.auth-card-inner');
+    if (!cardBody) return;
+    const h2 = cardBody.querySelector('h2');
+    const p = cardBody.querySelector('p');
+    if (h2) h2.textContent = 'Two-factor required';
+    if (p) p.textContent = 'Enter the 6-digit code from your authenticator app.';
+    const oldForm = document.querySelector('#authForm');
+    if (oldForm) {
+      oldForm.innerHTML = `
+        <div class="field auth-field">
+          <label for="totpCode">Authentication code</label>
+          <input id="totpCode" name="token" type="text" inputmode="numeric" autocomplete="one-time-code"
+                 placeholder="123456" maxlength="6" pattern="[0-9]*" style="letter-spacing: 0.4em; font-size: 18px; text-align: center;" required>
+        </div>
+        <button class="btn primary block lg auth-submit-btn" type="submit">Verify &amp; sign in</button>`;
+      oldForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const token = document.getElementById('totpCode').value.trim();
+        const restore = setBtnLoading(oldForm.querySelector('button[type="submit"]'), 'Verifying…');
+        try {
+          const data = await api.post('/api/auth/login', { email, password, token });
+          await authView.finishLogin(data);
+        } catch (err) {
+          showToast(err.message, 'error');
+          restore();
+        }
+      });
+      document.getElementById('totpCode').focus();
+    }
+  };
 }
 
 async function forgotPasswordView() {
@@ -3198,6 +3244,11 @@ async function settingsView() {
       
        <section class="panel">
         <div class="panel-head"><h2>Security</h2></div>
+        <div id="totpSection" style="border-bottom:1px solid var(--line); padding-bottom:14px; margin-bottom:14px;">
+          <h3 style="font-size:13.5px; margin:0 0 4px 0;">Two-factor authentication</h3>
+          <p class="muted" style="font-size:12.5px; margin:0 0 8px 0;">Require a 6-digit authenticator code when you sign in.</p>
+          <div id="totpBody"></div>
+        </div>
         <form class="form" id="passwordForm">
           <input type="text" name="email" value="${escapeHtml(state.user.email)}" autocomplete="username" style="display: none;" readonly>
           <div class="field">
@@ -3250,6 +3301,68 @@ async function settingsView() {
 
   document.querySelectorAll('[data-route]').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.route)));
   wirePwToggles();
+
+  // Two-factor section
+  const totpBody = document.getElementById('totpBody');
+  if (totpBody) {
+    const enabled = Boolean(state.user.twoFactorEnabled);
+    if (!enabled) {
+      totpBody.innerHTML = `
+        <button class="btn ghost" id="totpStartBtn" type="button">Set up authenticator app</button>
+        <div id="totpEnrollArea" style="display:none; margin-top:10px;">
+          <img id="totpQr" alt="QR code" style="width:160px; height:160px; border-radius:8px; background:#fff; padding:6px;">
+          <p class="muted" style="font-size:12px; margin:8px 0;">Scan with Google Authenticator, Authy, or 1Password, then enter the current code.</p>
+          <form class="form" id="totpConfirmForm">
+            <input id="totpConfirmCode" inputmode="numeric" maxlength="6" placeholder="123456"
+                   style="letter-spacing:0.4em; text-align:center; font-size:16px; width:140px;" required>
+            <button class="btn primary" type="submit" style="margin-top:8px; display:block;">Activate</button>
+          </form>
+        </div>`;
+      document.getElementById('totpStartBtn').addEventListener('click', async () => {
+        try {
+          const data = await api.post('/api/auth/totp/enroll', {});
+          document.getElementById('totpEnrollArea').style.display = 'block';
+          document.getElementById('totpQr').src = data.qrDataUrl;
+          document.getElementById('totpConfirmCode').focus();
+        } catch (err) { showToast(err.message, 'error'); }
+      });
+      document.getElementById('totpConfirmForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const restore = setBtnLoading(e.currentTarget.querySelector('button[type=submit]'), 'Activating…');
+        try {
+          await api.post('/api/auth/totp/confirm', { token: document.getElementById('totpConfirmCode').value.trim() });
+          state.user.twoFactorEnabled = true;
+          localStorage.setItem('cv_user', JSON.stringify(state.user));
+          showToast('Two-factor authentication activated.');
+          await settingsView();
+        } catch (err) {
+          showToast(err.message, 'error');
+          restore();
+        }
+      });
+    } else {
+      totpBody.innerHTML = `
+        <p style="font-size:13px; color:var(--success, #3fa66a); font-weight:600; margin:0 0 6px 0;">Active — a code is required at sign-in.</p>
+        <form class="form" id="totpDisableForm">
+          <input type="password" id="totpDisablePw" placeholder="Current password" autocomplete="current-password" required>
+          <button class="btn danger" type="submit" style="margin-top:6px; display:block;">Disable two-factor</button>
+        </form>`;
+      document.getElementById('totpDisableForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const restore = setBtnLoading(e.currentTarget.querySelector('button[type=submit]'), 'Disabling…');
+        try {
+          await api.post('/api/auth/totp/disable', { currentPassword: document.getElementById('totpDisablePw').value });
+          state.user.twoFactorEnabled = false;
+          localStorage.setItem('cv_user', JSON.stringify(state.user));
+          showToast('Two-factor authentication disabled.');
+          await settingsView();
+        } catch (err) {
+          showToast(err.message, 'error');
+          restore();
+        }
+      });
+    }
+  }
 
   document.querySelector('#detailsForm').addEventListener('submit', async (e) => {
     e.preventDefault();

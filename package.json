@@ -21,10 +21,12 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.2.0",
     "openai": "^4.78.1",
+    "otplib": "^12.0.1",
     "pdf-parse": "^1.1.1",
     "pdfkit": "^0.19.1",
     "pg": "^8.13.1",
     "pg-boss": "^10.4.2",
+    "qrcode": "^1.5.4",
     "resend": "^6.17.2",
     "svg-to-pdfkit": "^0.1.8"
   },

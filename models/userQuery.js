@@ -21,7 +21,7 @@ const userQuery = {
    */
   async findByEmail(email) {
     const result = await pool.query(
-      `SELECT id, email, password_hash, full_name, created_at, must_change_password, reset_token_expires
+      `SELECT id, email, password_hash, full_name, created_at, must_change_password, reset_token_expires, totp_secret_enc, totp_enabled
        FROM users WHERE email = $1`,
       [email]
     );
@@ -33,7 +33,7 @@ const userQuery = {
    */
   async findById(id) {
     const result = await pool.query(
-      `SELECT id, email, full_name, created_at, must_change_password, reset_token_expires
+      `SELECT id, email, full_name, created_at, must_change_password, reset_token_expires, totp_secret_enc, totp_enabled
        FROM users WHERE id = $1`,
       [id]
     );
@@ -91,6 +91,33 @@ const userQuery = {
   },
 
   /**
+   * Store an encrypted TOTP seed without enabling it yet (enrollment step 1).
+   */
+  async setTotpSecret(id, totpSecretEnc) {
+    const result = await pool.query(
+      `UPDATE users SET totp_secret_enc = $2 WHERE id = $1 RETURNING id`,
+      [id, totpSecretEnc]
+    );
+    return result.rows[0] || null;
+  },
+
+  async enableTotp(id) {
+    const result = await pool.query(
+      `UPDATE users SET totp_enabled = true WHERE id = $1 AND totp_secret_enc IS NOT NULL RETURNING id`,
+      [id]
+    );
+    return result.rows[0] || null;
+  },
+
+  async clearTotp(id) {
+    const result = await pool.query(
+      `UPDATE users SET totp_secret_enc = NULL, totp_enabled = false WHERE id = $1 RETURNING id`,
+      [id]
+    );
+    return result.rows[0] || null;
+  },
+
+  /**
    * Store a hashed reset token with an expiry. Deliberately does NOT touch
    * password_hash: the current credential stays valid until a reset completes.
    */
@@ -111,7 +138,7 @@ const userQuery = {
    */
   async findByResetToken(tokenHash) {
     const result = await pool.query(
-      `SELECT id, email, full_name, created_at, must_change_password, reset_token_expires
+      `SELECT id, email, full_name, created_at, must_change_password, reset_token_expires, totp_secret_enc, totp_enabled
        FROM users
        WHERE reset_token = $1 AND reset_token_expires > NOW()`,
       [tokenHash]

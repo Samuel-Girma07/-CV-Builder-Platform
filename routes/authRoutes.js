@@ -15,6 +15,9 @@ router.post('/forgot-password', authLimiter, authController.forgotPassword);
 router.post('/reset-password', authLimiter, authController.resetPassword);
 router.post('/temp-password', authLimiter, authController.issueTempPassword);
 router.post('/digest-preference', authLimiter, authMiddleware, authController.updateDigestPreference);
+router.post('/totp/enroll', authLimiter, authMiddleware, authController.startTotpEnroll);
+router.post('/totp/confirm', authLimiter, authMiddleware, authController.confirmTotpEnroll);
+router.post('/totp/disable', authLimiter, authMiddleware, authController.disableTotp);
 
 
 module.exports = router;

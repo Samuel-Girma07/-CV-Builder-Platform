@@ -3,6 +3,9 @@ const jwt = require('jsonwebtoken');
 const userQuery = require('../models/userQuery');
 const profileQuery = require('../models/profileQuery');
 const crypto = require('crypto');
+const { authenticator } = require('otplib');
+const QRCode = require('qrcode');
+const { encrypt, decrypt } = require('../utils/crypto');
 const { sendResetEmail, sendTempPasswordEmail, isEmailConfigured } = require('../utils/email');
 
 const SALT_ROUNDS = 12;
@@ -59,7 +62,24 @@ function publicUser(user) {
     createdAt: user.created_at,
     mustChangePassword: user.must_change_password || false,
     resetTokenExpires: user.reset_token_expires || null,
+    twoFactorEnabled: user.totp_enabled || false,
   };
+}
+
+/**
+ * Verify a TOTP code against the user's stored encrypted seed. Returns false
+ * when no seed exists or the ciphertext fails authentication (tampered).
+ */
+function verifyTotp(user, token) {
+  if (!user || !user.totp_secret_enc) return { ok: false };
+  let secret;
+  try {
+    secret = decrypt(user.totp_secret_enc);
+  } catch (err) {
+    return { ok: false };
+  }
+  const ok = authenticator.verify({ token: String(token || '').trim(), secret });
+  return { ok };
 }
 
 function signToken(user) {
@@ -176,6 +196,19 @@ const authController = {
         }
       }
 
+      // Two-factor challenge: the password alone never yields a JWT when TOTP
+      // is on. Step 2 re-posts credentials plus the 6-digit code.
+      if (user.totp_enabled) {
+        const provided = typeof req.body.token === 'string' ? req.body.token.trim() : '';
+        if (!provided) {
+          return res.json({ twoFactorRequired: true });
+        }
+        const { ok } = verifyTotp(user, provided);
+        if (!ok) {
+          return res.status(401).json({ error: 'Invalid two-factor code.' });
+        }
+      }
+
       return res.json({
         token: signToken(user),
         user: publicUser(user),
@@ -266,6 +299,59 @@ const authController = {
       const updated = await userQuery.setDigestOptIn(req.user.id, digestOptIn);
       if (!updated) return res.status(404).json({ error: 'User not found.' });
       return res.json({ message: digestOptIn ? 'Weekly digest enabled.' : 'Weekly digest disabled.' });
+    } catch (err) {
+      return next(err);
+    }
+  },
+
+  /**
+   * TOTP enrollment step 1: generate a seed, store it encrypted but DISABLED,
+   * and hand back the otpauth URL + QR so the client can render it.
+   */
+  async startTotpEnroll(req, res, next) {
+    try {
+      const secret = authenticator.generateSecret();
+      await userQuery.setTotpSecret(req.user.id, encrypt(secret));
+
+      const account = encodeURIComponent(req.user.email);
+      const service = encodeURIComponent('CV Builder Platform');
+      const otpauthUrl = authenticator.keyuri(req.user.email || account, 'CV Builder Platform', secret);
+      const qrDataUrl = await QRCode.toDataURL(otpauthUrl);
+      return res.json({ otpauthUrl, qrDataUrl });
+    } catch (err) {
+      return next(err);
+    }
+  },
+
+  /** TOTP enrollment step 2: prove possession of the device before enabling. */
+  async confirmTotpEnroll(req, res, next) {
+    try {
+      const user = await userQuery.findById(req.user.id);
+      const { ok } = verifyTotp(user, req.body.token);
+      if (!ok) {
+        return res.status(400).json({ error: 'That code is not valid. Check your authenticator app and try again.' });
+      }
+      await userQuery.enableTotp(req.user.id);
+      return res.json({ message: 'Two-factor authentication is now active.', twoFactorEnabled: true });
+    } catch (err) {
+      return next(err);
+    }
+  },
+
+  /** Turning 2FA off requires the current password — the strongest factor held. */
+  async disableTotp(req, res, next) {
+    try {
+      const { currentPassword } = req.body;
+      if (!currentPassword) {
+        return res.status(400).json({ error: 'Current password is required to disable two-factor authentication.' });
+      }
+      const user = await userQuery.findByEmail(req.user.email);
+      const match = user ? await bcrypt.compare(currentPassword, user.password_hash) : false;
+      if (!match) {
+        return res.status(401).json({ error: 'Incorrect current password.' });
+      }
+      await userQuery.clearTotp(req.user.id);
+      return res.json({ message: 'Two-factor authentication disabled.', twoFactorEnabled: false });
     } catch (err) {
       return next(err);
     }
