@@ -179,3 +179,74 @@ describe('create compensating delete (P1-11)', () => {
     expect(applicationQuery.updateAtsScore).toHaveBeenCalledWith(78, 3, 88, ['k8s']);
   });
 });
+
+describe('AI feature error propagation (P1-4)', () => {
+  const APP = {
+    id: 42,
+    user_id: 3,
+    job_title: 'Dev',
+    company: 'Acme',
+    job_description: 'Build things.',
+  };
+
+  function unreadableAiResponse() {
+    globalThis.__aiCreate.mockResolvedValue({
+      choices: [{ message: { content: '```json\nnot-really-json' } }],
+    });
+  }
+
+  test('tailorCv forwards its deliberate 502 to the error handler instead of masking it as 500', async () => {
+    applicationQuery.findById.mockResolvedValue(APP);
+    profileQuery.findByUserId.mockResolvedValue({ parsed_json_data: { experience: [{}] } });
+    applicationQuery.updateTailoredCvForUser = jest.fn();
+    unreadableAiResponse();
+
+    const next = jest.fn();
+    await applicationController.tailorCv(
+      { params: { id: '42' }, user: USER },
+      mkRes(),
+      next
+    );
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(next.mock.calls[0][0].status).toBe(502);
+    expect(next.mock.calls[0][0].message).toMatch(/unreadable CV/i);
+  });
+
+  test('generateInterviewPrep forwards its deliberate 502 as well', async () => {
+    applicationQuery.findById.mockResolvedValue(APP);
+    profileQuery.findByUserId.mockResolvedValue(null);
+    applicationQuery.updateInterviewPrepForUser = jest.fn();
+    unreadableAiResponse();
+
+    const next = jest.fn();
+    await applicationController.generateInterviewPrep(
+      { params: { id: '42' }, user: USER },
+      mkRes(),
+      next
+    );
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(next.mock.calls[0][0].status).toBe(502);
+  });
+
+  test('tailored CV that fails structural validation reaches the client as a 502', async () => {
+    applicationQuery.findById.mockResolvedValue(APP);
+    profileQuery.findByUserId.mockResolvedValue({ parsed_json_data: { experience: [{}] } });
+    applicationQuery.updateTailoredCvForUser = jest.fn();
+    // Parses fine as JSON but has no experience array → normalizeTailoredProfile rejects.
+    globalThis.__aiCreate.mockResolvedValue({
+      choices: [{ message: { content: JSON.stringify({ personalInfo: {} } ) } }],
+    });
+
+    const next = jest.fn();
+    await applicationController.tailorCv(
+      { params: { id: '42' }, user: USER },
+      mkRes(),
+      next
+    );
+
+    expect(next.mock.calls[0][0].status).toBe(502);
+    expect(applicationQuery.updateTailoredCvForUser).not.toHaveBeenCalled();
+  });
+});

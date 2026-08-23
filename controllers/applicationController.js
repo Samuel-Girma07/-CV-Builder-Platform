@@ -5,6 +5,7 @@ const { streamCoverLetterPdf } = require('../services/coverLetterPdf');
 const { streamCvPdf } = require('../services/cvPdf');
 const { callAi } = require('../services/aiClient');
 const { normalizeTailoredProfile, normalizePrepGuide } = require('../utils/schemas');
+const { logger } = require('../middlewares/logger');
 
 const VALID_TONES = ['Formal', 'Confident', 'Concise'];
 const ATS_JSON_SCHEMA = `{
@@ -373,8 +374,10 @@ INSTRUCTIONS:
       const updatedApp = await applicationQuery.updateTailoredCvForUser(id, req.user.id, normalized);
       return res.json({ application: updatedApp });
     } catch (err) {
-      console.error('Tailor CV error:', err);
-      return res.status(500).json({ error: 'Failed to generate tailored CV.' });
+      // Deliberate 502s carry .status and a user-facing message; everything
+      // else falls through to the generic 500 in the global error handler.
+      logger.error(`Tailored CV generation failed: ${err.message}`);
+      return next(err);
     }
   },
 
@@ -470,8 +473,8 @@ No markdown, no backticks, JUST JSON.`;
       const updatedApp = await applicationQuery.updateInterviewPrepForUser(id, req.user.id, normalizedGuide);
       return res.json({ application: updatedApp });
     } catch (err) {
-      console.error('Interview Prep error:', err);
-      return res.status(500).json({ error: 'Failed to generate interview prep guide.' });
+      logger.error(`Interview prep generation failed: ${err.message}`);
+      return next(err);
     }
   },
 };
