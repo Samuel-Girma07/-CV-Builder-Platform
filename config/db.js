@@ -1,17 +1,11 @@
 const { Pool } = require('pg');
+const { resolveSsl } = require('./ssl');
 
-const isRemote =
-  process.env.DATABASE_URL &&
-  !process.env.DATABASE_URL.includes('localhost') &&
-  !process.env.DATABASE_URL.includes('127.0.0.1');
-
-// Certificate validation is ON by default; PGSSLSTRICT=false opts out ONLY
-// for databases that legitimately use self-signed certificates.
-const sslStrict = process.env.PGSSLSTRICT !== 'false';
-
+// SSL policy lives in config/ssl.js: honors PGSSLSTRICT, PGSSLROOTCERT and
+// the sslmode parameter in DATABASE_URL. See that file for the matrix.
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: isRemote ? { rejectUnauthorized: sslStrict } : false,
+  ssl: resolveSsl(process.env.DATABASE_URL),
 });
 
 pool.on('error', (err) => {

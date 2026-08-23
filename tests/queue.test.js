@@ -77,16 +77,21 @@ describe('pg-boss queue lifecycle', () => {
     expect(boss.createdQueues.sort()).toEqual([...queue.QUEUES].sort());
   });
 
-  test('remote databases get certificate validation unless PGSSLSTRICT=false', async () => {
+  test('remote hosts default to encrypted-unvalidated TLS; PGSSLSTRICT=true forces verification', async () => {
     process.env.DATABASE_URL = 'postgresql://u:p@db.example.com:5432/app';
 
     await queue.startQueue();
-    expect(globalThis.__bossInstances[0].opts.ssl).toEqual({ rejectUnauthorized: true });
+    expect(globalThis.__bossInstances[0].opts.ssl).toEqual({ rejectUnauthorized: false });
+    await queue.stopQueue();
+
+    process.env.PGSSLSTRICT = 'true';
+    await queue.startQueue();
+    expect(globalThis.__bossInstances[1].opts.ssl).toEqual({ rejectUnauthorized: true });
     await queue.stopQueue();
 
     process.env.PGSSLSTRICT = 'false';
     await queue.startQueue();
-    expect(globalThis.__bossInstances[1].opts.ssl).toEqual({ rejectUnauthorized: false });
+    expect(globalThis.__bossInstances[2].opts.ssl).toEqual({ rejectUnauthorized: false });
   });
 
   test('start is idempotent — a second call reuses the running instance', async () => {

@@ -1,5 +1,6 @@
 const PgBoss = require('pg-boss');
 const { logger } = require('../middlewares/logger');
+const { resolveSsl } = require('./ssl');
 
 /*
   Background job queue (pg-boss) — Postgres-backed, zero extra infrastructure.
@@ -14,15 +15,12 @@ let boss = null;
 let running = false;
 
 function connectionOptions() {
-  const url = process.env.DATABASE_URL;
-  // Mirror config/db.js: validate certificates for remote databases unless
-  // explicitly opted out for self-signed certificate environments.
-  const isRemote = url && !url.includes('localhost') && !url.includes('127.0.0.1');
-  const sslStrict = process.env.PGSSLSTRICT !== 'false';
+  // Mirror config/db.js via the shared SSL policy (PGSSLSTRICT /
+  // PGSSLROOTCERT / sslmode-in-URL). Keep the queue lightweight.
   return {
-    connectionString: url,
+    connectionString: process.env.DATABASE_URL,
     max: 2,
-    ssl: isRemote ? { rejectUnauthorized: sslStrict } : false,
+    ssl: resolveSsl(process.env.DATABASE_URL),
   };
 }
 
