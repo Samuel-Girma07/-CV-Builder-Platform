@@ -60,6 +60,7 @@ const applicationRoutes = require('./routes/applicationRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const insightRoutes = require('./routes/insightRoutes');
 const interviewRoutes = require('./routes/interviewRoutes');
+const mockInterviewRoutes = require('./routes/mockInterviewRoutes');
 const xrayRoutes = require('./routes/xrayRoutes');
 
 app.use(helmet());
@@ -86,6 +87,7 @@ app.use('/api/applications', applicationRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/insights', insightRoutes);
 app.use('/api/interviews', interviewRoutes);
+app.use('/api/mock-interviews', mockInterviewRoutes);
 app.use('/api/xray', xrayRoutes);
 
 app.use('/api', (req, res) => {

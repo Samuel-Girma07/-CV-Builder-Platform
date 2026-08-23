@@ -92,6 +92,29 @@ CREATE TABLE IF NOT EXISTS cv_versions (
   uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS interview_sessions (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+  mode VARCHAR(20) NOT NULL DEFAULT 'mixed',
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
+  question_count INTEGER NOT NULL DEFAULT 5,
+  score INTEGER,
+  summary TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  completed_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS interview_messages (
+  id SERIAL PRIMARY KEY,
+  session_id INTEGER NOT NULL REFERENCES interview_sessions(id) ON DELETE CASCADE,
+  role VARCHAR(10) NOT NULL,
+  question_index INTEGER,
+  content TEXT NOT NULL,
+  critique JSONB,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS profile_versions (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -157,6 +180,11 @@ CREATE INDEX IF NOT EXISTS idx_applications_user_active
 
 CREATE INDEX IF NOT EXISTS idx_interviews_user ON interviews(user_id);
 CREATE INDEX IF NOT EXISTS idx_interviews_app ON interviews(application_id);
+
+CREATE INDEX IF NOT EXISTS idx_interview_sessions_user ON interview_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_interview_sessions_app ON interview_sessions(application_id);
+
+CREATE INDEX IF NOT EXISTS idx_interview_messages_session ON interview_messages(session_id, id);
 
 CREATE INDEX IF NOT EXISTS idx_cv_versions_user ON cv_versions(user_id);
 

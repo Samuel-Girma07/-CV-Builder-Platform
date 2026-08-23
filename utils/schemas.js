@@ -113,4 +113,39 @@ function normalizePrepGuide(raw) {
   return cards.length > 0 ? cards : null;
 }
 
-module.exports = { normalizeTailoredProfile, normalizePrepGuide, sanitizeText, toSafeString };
+/**
+ * Shape produced by the mock-interview coach per turn. The candidate answer
+ * gets a rating plus concrete STAR feedback; the coach either advances to a
+ * next question or finishes the session with an overall summary.
+ * @returns {object|null} null when the coach output cannot be trusted
+ */
+function normalizeMockTurn(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+
+  const c = raw.critique;
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return null;
+  const rating = Number(c.rating);
+  if (!Number.isFinite(rating)) return null;
+
+  let nextQuestion = toSafeString(raw.nextQuestion || raw.next_question);
+  const finish = Boolean(raw.finish);
+
+  // A live turn must either advance or close the session — anything else
+  // would strand the user mid-interview.
+  if (!nextQuestion && !finish) return null;
+  if (finish) nextQuestion = '';
+
+  return {
+    critique: {
+      rating: Math.max(0, Math.min(100, Math.round(rating))),
+      strengths: normalizeStringArray(c.strengths, 4),
+      improvements: normalizeStringArray(c.improvements, 4),
+      sample_answer: toSafeString(c.sampleAnswer || c.sample_answer),
+    },
+    nextQuestion,
+    finish,
+    summary: finish ? toSafeString(raw.summary) : '',
+  };
+}
+
+module.exports = { normalizeTailoredProfile, normalizePrepGuide, normalizeMockTurn, sanitizeText, toSafeString };

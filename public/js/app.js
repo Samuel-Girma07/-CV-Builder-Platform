@@ -2486,7 +2486,23 @@ async function applicationDetailView(id) {
                 </details>
               `).join('')}
              </div>`
-          : emptyState({ icon: 'doc', title: 'No Prep Guide Yet', message: 'Generate flashcards to prep for this interview.' })}
+           : emptyState({ icon: 'doc', title: 'No Prep Guide Yet', message: 'Generate flashcards to prep for this interview.' })}
+
+         <div id="mockInterviewPanel" style="margin-top: 22px; border-top: 1px solid var(--border); padding-top: 18px;">
+           <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; margin-bottom: 6px;">
+             <div style="flex:1;">
+               <h3 style="font-size: 14px; color: var(--accent); margin: 0 0 4px 0;">Practice interview</h3>
+               <p style="margin:0; color:var(--muted); font-size:13px;">Answer live and get coached against your actual CV.</p>
+             </div>
+             <select id="mockMode" style="padding:8px; font-size:13px;">
+               <option value="mixed">Mixed</option>
+               <option value="behavioral">Behavioral</option>
+               <option value="technical">Technical</option>
+             </select>
+             <button class="btn primary" type="button" id="startMockBtn">${icons.spark} Start practice</button>
+           </div>
+           <div id="mockInterviewChat"></div>
+         </div>
       </section>
 
       <div class="detail-standout">
@@ -2738,6 +2754,9 @@ async function applicationDetailView(id) {
     });
   }
 
+  // Mock interview practice wiring
+  wireMockInterview(id);
+
   // Truncate long blocks (job description, cover letter) with a See more/less toggle.
   wireClamps();
 
@@ -2814,9 +2833,96 @@ async function applicationDetailView(id) {
   }
 }
 
+function wireMockInterview(appId) {
+  const panel = document.getElementById('mockInterviewPanel');
+  if (!panel) return;
+  const chat = document.getElementById('mockInterviewChat');
+  const startBtn = document.getElementById('startMockBtn');
+  const modeSel = document.getElementById('mockMode');
+  let session = null;
+  let messages = [];
+
+  const bubble = (m) => {
+    const isCoach = m.role === 'coach';
+    const critique = m.critique;
+    return `
+      <div class="mock-msg ${isCoach ? 'coach' : 'candidate'}">
+        <div class="mock-bubble">${escapeHtml(m.content)}</div>
+        ${critique && typeof critique === 'object' ? `
+          <div class="mock-critique">
+            <span class="mock-rating ${critique.rating >= 70 ? 'good' : critique.rating >= 40 ? 'ok' : 'weak'}">${critique.rating}/100</span>
+            ${(critique.strengths || []).length ? `<div><strong>Strengths:</strong> ${escapeHtml(critique.strengths.join(' · '))}</div>` : ''}
+            ${(critique.improvements || []).length ? `<div><strong>Improve:</strong> ${escapeHtml(critique.improvements.join(' · '))}</div>` : ''}
+            ${critique.sample_answer ? `<details><summary>Stronger sample answer</summary><div style="margin-top:6px;">${escapeHtml(critique.sample_answer)}</div></details>` : ''}
+          </div>` : ''}
+      </div>`;
+  };
+
+  const paint = () => {
+    const answered = messages.filter((m) => m.role === 'candidate').length;
+    chat.innerHTML = `
+      ${session ? `<div class="mock-progress">${session.mode} · Question ${Math.min(answered + (session.status === 'active' ? 1 : 0), session.question_count)} of ${session.question_count}${session.status !== 'active' ? ` · Finished` : ''}</div>` : ''}
+      <div class="mock-chat">${messages.map(bubble).join('')}</div>
+      <div id="mockReport"></div>
+      ${session && session.status === 'active' ? `
+        <form class="form" id="mockAnswerForm" style="margin-top:12px;">
+          <textarea id="mockAnswerText" rows="4" placeholder="Type your answer…" required></textarea>
+          <div class="actions" style="margin-top:8px;">
+            <button class="btn primary" type="submit">Send answer</button>
+          </div>
+        </form>` : session && session.status !== 'active' ? `
+        <button class="btn ghost" type="button" id="mockAgainBtn" style="margin-top:10px;">${icons.spark} Practice again</button>` : ''}
+    `;
+    const scroller = chat.querySelector('.mock-chat');
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+
+    const form = document.getElementById('mockAnswerForm');
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const textEl = document.getElementById('mockAnswerText');
+        const text = textEl.value.trim();
+        if (!text) return;
+        const restore = setBtnLoading(form.querySelector('button[type=submit]'), 'Coach is thinking…');
+        try {
+          const data = await api.post(`/api/mock-interviews/session/${session.id}/answer`, { text });
+          messages.push(data.candidateMessage, data.coachMessage);
+          session = data.session;
+          paint();
+        } catch (err) {
+          showToast(err.message, 'error');
+        } finally {
+          restore();
+        }
+      });
+    }
+    const again = document.getElementById('mockAgainBtn');
+    if (again) again.addEventListener('click', start);
+  };
+
+  async function start() {
+    const restore = setBtnLoading(startBtn, 'Preparing…');
+    try {
+      const data = await api.post(`/api/mock-interviews/${appId}/start`, { mode: modeSel.value });
+      session = data.session;
+      messages = data.messages;
+      startBtn.disabled = true;
+      paint();
+      showToast(data.resumed ? 'Resumed your practice session.' : 'Practice interview started.');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      restore();
+      if (session) startBtn.disabled = true;
+    }
+  }
+
+  startBtn.addEventListener('click', start);
+}
+
 /* ----------------------------------------------------------------
-   Shared wiring
-   ---------------------------------------------------------------- */
+    Shared wiring
+    ---------------------------------------------------------------- */
 function wireOpenApp() {
   document.querySelectorAll('[data-open-app]').forEach((button) => {
     button.addEventListener('click', () => navigate(`application:${button.dataset.openApp}`));
