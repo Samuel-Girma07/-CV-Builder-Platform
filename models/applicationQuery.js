@@ -152,10 +152,12 @@ const applicationQuery = {
   },
 
   /**
-   * Get all applications with optional sorting and filtering.
-   * Only columns on the allowlist can be used for sort/filter.
+   * Get all applications with optional sorting, filtering, and full-text
+   * search. Only columns on the allowlist can be used for sort/filter; the
+   * `q` term is matched against the generated tsvector via parameterized
+   * websearch_to_tsquery, so user input never touches SQL text.
    */
-  async findAllSorted(userId, { sort, order, filters } = {}) {
+  async findAllSorted(userId, { sort, order, q, filters } = {}) {
     const params = [userId];
     let where = 'WHERE user_id = $1 AND deleted_at IS NULL';
 
@@ -167,6 +169,12 @@ const applicationQuery = {
           where += ` AND ${col} ILIKE $${params.length}`;
         }
       }
+    }
+
+    /* Full-text search across title/company/description */
+    if (q && typeof q === 'string' && q.trim()) {
+      params.push(q.trim());
+      where += ` AND search_vector @@ websearch_to_tsquery('english', $${params.length})`;
     }
 
     /* Apply sorting */

@@ -4,6 +4,7 @@ let gridState = {
   sortCol: 'created_at',
   sortDir: 'desc',
   filters: {},
+  searchQ: '',
   selectedIds: new Set(),
   editing: null, // { id, field }
   lastDeleted: null, // { ids: [...], data: [...] } — restorable via bulk 'restore'
@@ -53,6 +54,7 @@ function getCellValue(row, colId) {
 
 async function renderDataGrid() {
   const query = new URLSearchParams({ sort: gridState.sortCol, order: gridState.sortDir });
+  if (gridState.searchQ) query.append('q', gridState.searchQ);
   for (const [k, v] of Object.entries(gridState.filters)) {
     if (v) query.append('filter_' + k, v);
   }
@@ -173,6 +175,7 @@ function drawGrid() {
   const toolbarHtml = `
     <div class="grid-toolbar">
       <h2>Applications Tracker</h2>
+      <input type="search" id="gridSearch" value="${escapeHtml(gridState.searchQ)}" placeholder="Search title, company, description…" aria-label="Search applications" style="max-width:260px;">
       <span style="flex:1"></span>
       <button class="btn" id="btnExportCSV">Export CSV</button>
       <button class="btn" id="btnAddColumn">Add Custom Column</button>
@@ -352,6 +355,19 @@ function attachGridEvents() {
       }
     }
   });
+
+  // Full-text search (debounced, server-side via tsvector)
+  const gridSearch = document.getElementById('gridSearch');
+  if (gridSearch) {
+    let searchTimer;
+    gridSearch.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        gridState.searchQ = gridSearch.value.trim();
+        renderDataGrid();
+      }, 350);
+    });
+  }
 
   // Buttons
   document.getElementById('btnNewApp')?.addEventListener('click', () => {

@@ -52,6 +52,15 @@ CREATE TABLE IF NOT EXISTS applications (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS search_vector tsvector
+  GENERATED ALWAYS AS (
+    to_tsvector('english',
+      coalesce(job_title, '') || ' ' ||
+      coalesce(company, '') || ' ' ||
+      coalesce(job_description, '')
+    )
+  ) STORED;
+
 -- ------------------------------------------------------------
 -- 2. Support tables
 -- ------------------------------------------------------------
@@ -207,6 +216,9 @@ END $$;
 -- ------------------------------------------------------------
 
 CREATE INDEX IF NOT EXISTS idx_applications_user ON applications(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_applications_fts
+  ON applications USING GIN (search_vector);
 
 CREATE INDEX IF NOT EXISTS idx_applications_user_active
   ON applications(user_id)
