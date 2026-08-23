@@ -1,5 +1,24 @@
 const pool = require('../config/db');
+const jwt = require('jsonwebtoken');
 const { analyzePdfBuffer } = require('../utils/atsXray');
+const { isPdfBuffer } = require('../config/upload');
+
+const PDF_TICKET_TTL_SECONDS = 60;
+
+function validateId(idParam) {
+  const num = Number(idParam);
+  return Number.isInteger(num) && num > 0 ? num : null;
+}
+
+function safeContentDispositionName(name) {
+  const cleaned = String(name || 'cv.pdf')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/[^\w.\- ]+/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80);
+  return cleaned || 'cv.pdf';
+}
 
 /**
  * PostgreSQL rejects JSON that contains Unicode null bytes (\u0000) and some
@@ -33,6 +52,11 @@ const xrayController = {
       }
 
       const buffer = req.file.buffer;
+
+      if (!isPdfBuffer(buffer)) {
+        return res.status(400).json({ error: 'This file is not a valid PDF.' });
+      }
+
       const fileName = req.file.originalname;
       const userId = req.user.id;
 
@@ -58,21 +82,54 @@ const xrayController = {
 
       return res.json({ id: result.rows[0].id, report });
     } catch (err) {
-      if (err.message === 'Only PDF files are allowed.') {
-        return res.status(400).json({ error: err.message });
+      return next(err);
+    }
+  },
+
+  async issuePdfTicket(req, res, next) {
+    try {
+      const versionId = validateId(req.params.id);
+      if (!versionId) return res.status(400).json({ error: 'Invalid CV version ID.' });
+
+      const owned = await pool.query(
+        'SELECT 1 FROM cv_versions WHERE id = $1 AND user_id = $2',
+        [versionId, req.user.id]
+      );
+      if (owned.rows.length === 0) {
+        return res.status(404).json({ error: 'CV version not found' });
       }
+
+      const ticket = jwt.sign(
+        { sub: req.user.id, vid: versionId, scope: 'xray-pdf' },
+        process.env.JWT_SECRET,
+        { expiresIn: PDF_TICKET_TTL_SECONDS }
+      );
+
+      return res.json({ ticket, expiresIn: PDF_TICKET_TTL_SECONDS });
+    } catch (err) {
       return next(err);
     }
   },
 
   async getPdf(req, res, next) {
     try {
-      const { id } = req.params;
-      const userId = req.user.id;
+      const versionId = validateId(req.params.id);
+      if (!versionId) return res.status(400).json({ error: 'Invalid CV version ID.' });
+
+      let payload;
+      try {
+        payload = jwt.verify(String(req.query.ticket || ''), process.env.JWT_SECRET);
+      } catch (err) {
+        return res.status(401).json({ error: 'This preview link has expired. Reopen the scan to refresh it.' });
+      }
+
+      if (payload.scope !== 'xray-pdf' || Number(payload.vid) !== versionId) {
+        return res.status(403).json({ error: 'This link is not valid for this document.' });
+      }
 
       const result = await pool.query(
         'SELECT file_data, file_name FROM cv_versions WHERE id = $1 AND user_id = $2',
-        [id, userId]
+        [versionId, payload.sub]
       );
 
       if (result.rows.length === 0) {
@@ -81,7 +138,7 @@ const xrayController = {
 
       const fileData = result.rows[0].file_data;
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename="${result.rows[0].file_name}"`);
+      res.setHeader('Content-Disposition', `inline; filename="${safeContentDispositionName(result.rows[0].file_name)}"`);
       return res.send(fileData);
     } catch (err) {
       return next(err);
@@ -102,5 +159,7 @@ const xrayController = {
     }
   }
 };
+
+xrayController.safeContentDispositionName = safeContentDispositionName;
 
 module.exports = xrayController;
