@@ -6,6 +6,19 @@ function validateId(idParam) {
   return Number.isInteger(num) && num > 0 ? num : null;
 }
 
+/*
+  RFC 5545 TEXT escaping: backslash, semicolon, comma, and newlines must be
+  escaped or a crafted title/location can break the ICS structure or inject
+  extra properties into the calendar event.
+*/
+function icsEscape(value) {
+  return String(value || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\r?\n/g, '\\n');
+}
+
 const interviewController = {
   async getByApplication(req, res, next) {
     try {
@@ -35,9 +48,21 @@ const interviewController = {
       if (!title || !startTime || !endTime) {
         return res.status(400).json({ error: 'Title, start time, and end time are required.' });
       }
+      if (typeof title !== 'string' || title.trim().length === 0 || title.trim().length > 255) {
+        return res.status(400).json({ error: 'Title must be between 1 and 255 characters.' });
+      }
+      if (location !== undefined && location !== null && (typeof location !== 'string' || location.length > 255)) {
+        return res.status(400).json({ error: 'Location must be 255 characters or fewer.' });
+      }
+      if (notes !== undefined && notes !== null && typeof notes !== 'string') {
+        return res.status(400).json({ error: 'Notes must be text.' });
+      }
 
       if (new Date(startTime) >= new Date(endTime)) {
         return res.status(400).json({ error: 'Start time must be before end time.' });
+      }
+      if (Number.isNaN(new Date(startTime).getTime()) || Number.isNaN(new Date(endTime).getTime())) {
+        return res.status(400).json({ error: 'Start and end time must be valid dates.' });
       }
 
       const interview = await interviewQuery.create(
@@ -102,9 +127,9 @@ const interviewController = {
         `DTSTAMP:${dtStamp}`,
         `DTSTART:${dtStart}`,
         `DTEND:${dtEnd}`,
-        `SUMMARY:${interview.title}`,
-        `LOCATION:${interview.location || ''}`,
-        `DESCRIPTION:${(interview.notes || '').replace(/\n/g, '\\n')}`,
+        `SUMMARY:${icsEscape(interview.title)}`,
+        `LOCATION:${icsEscape(interview.location || '')}`,
+        `DESCRIPTION:${icsEscape(interview.notes || '')}`,
         'END:VEVENT',
         'END:VCALENDAR'
       ].join('\r\n');
@@ -119,3 +144,4 @@ const interviewController = {
 };
 
 module.exports = interviewController;
+interviewController.icsEscape = icsEscape;
