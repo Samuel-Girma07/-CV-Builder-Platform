@@ -1383,6 +1383,32 @@ function activityRow(item) {
     </button>`;
 }
 
+function buildSkillGapPanel(insight) {
+  if (!insight || !Array.isArray(insight.gaps)) {
+    return '<div class="spark-empty">Score more applications to reveal recurring skill gaps.</div>';
+  }
+  const { gaps, sampleOk } = insight;
+  if (!gaps.length || !sampleOk) {
+    return '<div class="spark-empty">Score at least three applications to reveal the skills employers keep asking for.</div>';
+  }
+  const max = gaps[0].total || 1;
+  const rows = gaps.map((gap) => {
+    const pct = Math.max(6, Math.round((gap.total / max) * 100));
+    const trendMark = gap.trend === 'rising' ? '<span class="trend-up">▲</span>'
+      : gap.trend === 'falling' ? '<span class="trend-down">▼</span>'
+      : '<span class="muted">–</span>';
+    return `
+      <div class="gap-row">
+        <div class="gap-head">
+          <span class="gap-skill">${escapeHtml(gap.skill)}</span>
+          <span class="gap-meta">${trendMark} ${gap.total}×${gap.recentCount > 0 ? ` · ${gap.recentCount} in last 30d` : ''}</span>
+        </div>
+        <div class="gap-bar-track"><div class="gap-bar-fill" style="width:${pct}%"></div></div>
+      </div>`;
+  }).join('');
+  return `<div class="gap-list">${rows}</div>`;
+}
+
 function buildFunnelChart(funnelData) {
   if (!funnelData || !funnelData.length || funnelData[0].total === 0) {
     return `<div class="spark-empty">No application data yet to build a funnel.</div>`;
@@ -1467,6 +1493,7 @@ async function dashboardView() {
     loadApplications(),
     api.get('/api/analytics/funnel'),
     api.get('/api/analytics/funnel?groupBy=channel'),
+    api.get('/api/insights/skill-gaps'),
   ]);
   const [statsResult, profileResult, appsResult] = results;
   if (statsResult.status === 'rejected') throw statsResult.reason;
@@ -1478,6 +1505,7 @@ async function dashboardView() {
   const applications = appsResult.value;
   const funnelOverall = results[3].status === 'fulfilled' ? results[3].value : null;
   const funnelCohort = results[4].status === 'fulfilled' ? results[4].value : null;
+  const skillGaps = results[5].status === 'fulfilled' ? results[5].value : null;
 
   const stats = statsData.stats;
   const recent = applications.slice(0, 4);
@@ -1517,6 +1545,11 @@ async function dashboardView() {
           <div class="panel-head"><h2>Application Funnel</h2></div>
           ${buildFunnelChart(funnelOverall)}
           ${buildCohortTable(funnelCohort)}
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h2>Skill gaps employers keep asking for</h2><span class="eyebrow">From missing-skills analysis</span></div>
+          ${buildSkillGapPanel(skillGaps)}
         </section>
 
         <section class="panel">

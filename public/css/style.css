@@ -902,6 +902,60 @@ hr {
   font-size: 13px;
 }
 
+/* Skill-gap radar rows */
+.gap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.gap-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gap-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.gap-skill {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gap-meta {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.trend-up { color: var(--success, #3fa66a); }
+.trend-down { color: var(--danger, #d05656); }
+
+.gap-bar-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.gap-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
 /* Right column summary rows (Cash / Investment / Crypto analogues) */
 .summary {
   display: flex;

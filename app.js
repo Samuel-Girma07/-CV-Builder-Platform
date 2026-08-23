@@ -58,6 +58,7 @@ const authRoutes = require('./routes/authRoutes');
 const profileRoutes = require('./routes/profileRoutes');
 const applicationRoutes = require('./routes/applicationRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
+const insightRoutes = require('./routes/insightRoutes');
 const interviewRoutes = require('./routes/interviewRoutes');
 const xrayRoutes = require('./routes/xrayRoutes');
 
@@ -83,6 +84,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/insights', insightRoutes);
 app.use('/api/interviews', interviewRoutes);
 app.use('/api/xray', xrayRoutes);
 
