@@ -18,6 +18,7 @@ router.post('/digest-preference', authLimiter, authMiddleware, authController.up
 router.post('/totp/enroll', authLimiter, authMiddleware, authController.startTotpEnroll);
 router.post('/totp/confirm', authLimiter, authMiddleware, authController.confirmTotpEnroll);
 router.post('/totp/disable', authLimiter, authMiddleware, authController.disableTotp);
+router.get('/export', authLimiter, authMiddleware, require('../controllers/exportController').exportAccount);
 
 
 module.exports = router;
