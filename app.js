@@ -84,6 +84,12 @@ app.use('/api', (req, res) => {
 });
 
 app.get('*', (req, res) => {
+  // Requests that look like files (missing assets, stale URLs, scanners)
+  // must not receive the SPA shell with a misleading 200 — only clean,
+  // extension-less client routes fall through to index.html.
+  if (path.extname(req.path)) {
+    return res.status(404).json({ error: 'Not found.' });
+  }
   return res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
