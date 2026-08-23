@@ -26,6 +26,13 @@ if (process.env.NODE_ENV === 'production' && !process.env.RESEND_API_KEY) {
   );
 }
 
+// A short JWT secret makes session tokens forgeable by brute force. Fail at
+// boot with instructions rather than running insecurely.
+if (process.env.JWT_SECRET.length < 32) {
+  logger.error('JWT_SECRET must be at least 32 characters. Generate one with: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'hex\'))"');
+  process.exit(1);
+}
+
 const pool = require('./config/db');
 async function runStartupMigration() {
   try {
