@@ -1457,13 +1457,27 @@ function buildCohortTable(cohortData) {
 async function dashboardView() {
   dashboardSkeleton();
 
-  const [statsData, profile, applications, funnelOverall, funnelCohort] = await Promise.all([
+  /* Core data (stats, profile, applications) failing means the dashboard has
+     nothing to render and surfaces the error state. Analytics are decorative:
+     a failure there degrades just those panels to their empty states instead
+     of blanking the entire page. */
+  const results = await Promise.allSettled([
     api.get('/api/applications/stats'),
     loadProfile(),
     loadApplications(),
     api.get('/api/analytics/funnel'),
     api.get('/api/analytics/funnel?groupBy=channel'),
   ]);
+  const [statsResult, profileResult, appsResult] = results;
+  if (statsResult.status === 'rejected') throw statsResult.reason;
+  if (profileResult.status === 'rejected') throw profileResult.reason;
+  if (appsResult.status === 'rejected') throw appsResult.reason;
+
+  const statsData = statsResult.value;
+  const profile = profileResult.value;
+  const applications = appsResult.value;
+  const funnelOverall = results[3].status === 'fulfilled' ? results[3].value : null;
+  const funnelCohort = results[4].status === 'fulfilled' ? results[4].value : null;
 
   const stats = statsData.stats;
   const recent = applications.slice(0, 4);
